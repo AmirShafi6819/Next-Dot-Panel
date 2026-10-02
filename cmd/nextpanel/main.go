@@ -19,10 +19,12 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/ashaibery/Next-Dot-Panel/internal/audit"
 	"github.com/ashaibery/Next-Dot-Panel/internal/auth"
 	"github.com/ashaibery/Next-Dot-Panel/internal/config"
 	"github.com/ashaibery/Next-Dot-Panel/internal/httpapi"
 	"github.com/ashaibery/Next-Dot-Panel/internal/logging"
+	"github.com/ashaibery/Next-Dot-Panel/internal/rbac"
 	"github.com/ashaibery/Next-Dot-Panel/internal/store"
 	"github.com/ashaibery/Next-Dot-Panel/internal/store/repos"
 	"github.com/ashaibery/Next-Dot-Panel/internal/version"
@@ -105,6 +107,16 @@ func serve(ctx context.Context, stdout, stderr io.Writer) int {
 		return 1
 	}
 
+	rbacSvc := rbac.New(queries, audit.New(queries, log), log)
+	if err := rbacSvc.Seed(ctx); err != nil {
+		log.Error(ctx, "startup check failed", "check", "rbac_seed", "error", err)
+		return 1
+	}
+	if err := rbacSvc.EnsureBootstrapAdminRole(ctx, cfg.Security.BootstrapUsername); err != nil {
+		log.Error(ctx, "startup check failed", "check", "rbac_bootstrap_role", "error", err)
+		return 1
+	}
+
 	// Binding before serving makes an occupied port a startup failure with a
 	// clear message instead of a crash loop.
 	ln, err := net.Listen("tcp", cfg.App.ListenAddr)
@@ -113,7 +125,7 @@ func serve(ctx context.Context, stdout, stderr io.Writer) int {
 		return 1
 	}
 
-	handler := httpapi.New(httpapi.Deps{Config: cfg, DB: db, Log: log, Auth: authSvc})
+	handler := httpapi.New(httpapi.Deps{Config: cfg, DB: db, Log: log, Auth: authSvc, RBAC: rbacSvc})
 	srv := &http.Server{
 		Handler:           handler,
 		ReadHeaderTimeout: 10 * time.Second,

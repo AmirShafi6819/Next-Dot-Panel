@@ -12,10 +12,12 @@ import (
 
 	"github.com/ashaibery/Next-Dot-Panel/internal/auth"
 	"github.com/ashaibery/Next-Dot-Panel/internal/config"
+	"github.com/ashaibery/Next-Dot-Panel/internal/domain"
 	"github.com/ashaibery/Next-Dot-Panel/internal/httpapi/dto"
 	"github.com/ashaibery/Next-Dot-Panel/internal/httpapi/handlers"
 	"github.com/ashaibery/Next-Dot-Panel/internal/httpapi/middleware"
 	"github.com/ashaibery/Next-Dot-Panel/internal/logging"
+	"github.com/ashaibery/Next-Dot-Panel/internal/rbac"
 	"github.com/ashaibery/Next-Dot-Panel/internal/store"
 )
 
@@ -28,6 +30,9 @@ type Deps struct {
 	// mounted, so the health surface can be exercised without a database user
 	// store.
 	Auth *auth.Service
+	// RBAC is the authorization and role-administration service. When nil the
+	// RBAC routes are not mounted.
+	RBAC *rbac.Service
 	// Readiness collects the probes behind /ready. When nil a fresh set is
 	// created, so a caller that wants to register its own probe passes one in.
 	Readiness *handlers.Readiness
@@ -60,6 +65,9 @@ func New(deps Deps) http.Handler {
 
 	if deps.Auth != nil {
 		registerAuthRoutes(r, deps)
+	}
+	if deps.RBAC != nil {
+		registerRBACRoutes(r, deps)
 	}
 
 	// Unmatched routes answer with the standard envelope rather than chi's
@@ -96,6 +104,28 @@ func registerAuthRoutes(r chi.Router, deps Deps) {
 			rt.Get("/sessions", h.Sessions)
 			rt.Delete("/sessions/{id}", h.RevokeSession)
 		})
+	})
+}
+
+// registerRBACRoutes mounts role and permission administration under
+// /api/v1. Every route requires a session and the permission named on it, so
+// authorization is enforced by the router, not only inside the service.
+func registerRBACRoutes(r chi.Router, deps Deps) {
+	h := &handlers.RBAC{Service: deps.RBAC, Log: deps.Log}
+	r.Route("/api/v1", func(rt chi.Router) {
+		rt.Use(middleware.Session(deps.Auth))
+		rt.Use(middleware.RequireAuth)
+
+		rt.With(middleware.RequirePermission(deps.RBAC, domain.PermUsersRead)).Get("/permissions", h.ListPermissions)
+		rt.With(middleware.RequirePermission(deps.RBAC, domain.PermUsersRead)).Get("/roles", h.ListRoles)
+		rt.With(middleware.RequirePermission(deps.RBAC, domain.PermUsersRead)).Get("/roles/{id}", h.GetRole)
+		rt.With(middleware.RequirePermission(deps.RBAC, domain.PermUsersManage)).Post("/roles", h.CreateRole)
+		rt.With(middleware.RequirePermission(deps.RBAC, domain.PermUsersManage)).Patch("/roles/{id}", h.UpdateRole)
+		rt.With(middleware.RequirePermission(deps.RBAC, domain.PermUsersManage)).Delete("/roles/{id}", h.DeleteRole)
+		rt.With(middleware.RequirePermission(deps.RBAC, domain.PermUsersManage)).Put("/roles/{id}/permissions", h.SetRolePermissions)
+
+		rt.With(middleware.RequirePermission(deps.RBAC, domain.PermUsersRead)).Get("/users/{id}/roles", h.ListUserRoles)
+		rt.With(middleware.RequirePermission(deps.RBAC, domain.PermUsersManage)).Put("/users/{id}/roles", h.SetUserRoles)
 	})
 }
 

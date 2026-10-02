@@ -49,6 +49,15 @@ entries are invented.
   change. HTTP surface under `/api/v1/auth` (`login`, `logout`, `password`,
   `reauth`, `me`, `sessions`) with `HttpOnly` session and readable double-submit
   CSRF cookies; a `sessions.reauth_at` migration on both dialects.
+- **Phase 4 — RBAC.** `internal/rbac`: the permission catalogue and default
+  `admin`/`operator`/`viewer` system roles are seeded idempotently at startup
+  (system roles are reconciled, custom roles are left alone); role CRUD,
+  permission-set management and user-role assignment; and the authorization
+  checks every service routes through — global permissions plus per-server
+  grants, with denials audited as `DENIED`. `internal/audit` centralises audit
+  writes. HTTP: `/api/v1/roles`, `/api/v1/permissions` and
+  `/api/v1/users/{id}/roles` behind a `RequirePermission` middleware. The
+  bootstrap administrator is granted the admin role on first start.
 
 ### Security
 
