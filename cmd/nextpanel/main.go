@@ -27,12 +27,15 @@ import (
 	"github.com/ashaibery/Next-Dot-Panel/internal/files"
 	"github.com/ashaibery/Next-Dot-Panel/internal/httpapi"
 	"github.com/ashaibery/Next-Dot-Panel/internal/logging"
+	"github.com/ashaibery/Next-Dot-Panel/internal/metrics"
+	"github.com/ashaibery/Next-Dot-Panel/internal/processes"
 	"github.com/ashaibery/Next-Dot-Panel/internal/provider"
 	"github.com/ashaibery/Next-Dot-Panel/internal/rbac"
 	"github.com/ashaibery/Next-Dot-Panel/internal/server"
 	"github.com/ashaibery/Next-Dot-Panel/internal/store"
 	"github.com/ashaibery/Next-Dot-Panel/internal/store/repos"
 	"github.com/ashaibery/Next-Dot-Panel/internal/terminal"
+	"github.com/ashaibery/Next-Dot-Panel/internal/users"
 	"github.com/ashaibery/Next-Dot-Panel/internal/version"
 )
 
@@ -156,6 +159,14 @@ func serve(ctx context.Context, stdout, stderr io.Writer) int {
 		MaxRatio:      cfg.Limits.MaxArchiveRatio,
 	})
 
+	usersSvc := users.New(queries, rbacSvc, auditWriter, log)
+	auditQuery := audit.NewQuery(queries, rbacSvc)
+	metricsSvc := metrics.New(queries, serverSvc, rbacSvc, auditWriter, log)
+	metricsSched := metrics.NewScheduler(metricsSvc, queries, cfg.Features.MetricInterval, log)
+	metricsSched.Start(ctx)
+	defer metricsSched.Stop()
+	processesSvc := processes.New(serverSvc, auditWriter, log)
+
 	// Binding before serving makes an occupied port a startup failure with a
 	// clear message instead of a crash loop.
 	ln, err := net.Listen("tcp", cfg.App.ListenAddr)
@@ -164,7 +175,7 @@ func serve(ctx context.Context, stdout, stderr io.Writer) int {
 		return 1
 	}
 
-	handler := httpapi.New(httpapi.Deps{Config: cfg, DB: db, Log: log, Auth: authSvc, RBAC: rbacSvc, Servers: serverSvc, Terminal: terminalSvc, Files: fileSvc})
+	handler := httpapi.New(httpapi.Deps{Config: cfg, DB: db, Log: log, Auth: authSvc, RBAC: rbacSvc, Servers: serverSvc, Terminal: terminalSvc, Files: fileSvc, Users: usersSvc, AuditQuery: auditQuery, Metrics: metricsSvc, Processes: processesSvc})
 	srv := &http.Server{
 		Handler:           handler,
 		ReadHeaderTimeout: 10 * time.Second,

@@ -10,6 +10,7 @@ import (
 
 	"github.com/go-chi/chi/v5"
 
+	"github.com/ashaibery/Next-Dot-Panel/internal/audit"
 	"github.com/ashaibery/Next-Dot-Panel/internal/auth"
 	"github.com/ashaibery/Next-Dot-Panel/internal/config"
 	"github.com/ashaibery/Next-Dot-Panel/internal/domain"
@@ -18,10 +19,13 @@ import (
 	"github.com/ashaibery/Next-Dot-Panel/internal/httpapi/handlers"
 	"github.com/ashaibery/Next-Dot-Panel/internal/httpapi/middleware"
 	"github.com/ashaibery/Next-Dot-Panel/internal/logging"
+	"github.com/ashaibery/Next-Dot-Panel/internal/metrics"
+	"github.com/ashaibery/Next-Dot-Panel/internal/processes"
 	"github.com/ashaibery/Next-Dot-Panel/internal/rbac"
 	"github.com/ashaibery/Next-Dot-Panel/internal/server"
 	"github.com/ashaibery/Next-Dot-Panel/internal/store"
 	"github.com/ashaibery/Next-Dot-Panel/internal/terminal"
+	"github.com/ashaibery/Next-Dot-Panel/internal/users"
 )
 
 // Deps are the wiring inputs for the router.
@@ -45,6 +49,15 @@ type Deps struct {
 	// Files is the remote file service. When nil the file routes are not
 	// mounted.
 	Files *files.Service
+	// Users administers accounts. When nil the user routes are not mounted.
+	Users *users.Service
+	// AuditQuery reads the audit trail. When nil the audit route is absent.
+	AuditQuery *audit.Query
+	// Metrics serves resource monitoring. When nil the metrics routes are
+	// absent.
+	Metrics *metrics.Service
+	// Processes manages remote processes. When nil those routes are absent.
+	Processes *processes.Service
 	// Readiness collects the probes behind /ready. When nil a fresh set is
 	// created, so a caller that wants to register its own probe passes one in.
 	Readiness *handlers.Readiness
@@ -89,6 +102,15 @@ func New(deps Deps) http.Handler {
 	}
 	if deps.Files != nil {
 		registerFilesRoutes(r, deps)
+	}
+	if deps.Users != nil {
+		registerUserRoutes(r, deps)
+	}
+	if deps.AuditQuery != nil {
+		registerAuditRoutes(r, deps)
+	}
+	if deps.Metrics != nil || deps.Processes != nil {
+		registerOpsRoutes(r, deps)
 	}
 
 	// Unmatched routes answer with the standard envelope rather than chi's
@@ -200,6 +222,54 @@ func registerFilesRoutes(r chi.Router, deps Deps) {
 		rt.Post("/api/v1/servers/{id}/files/rename", h.Rename)
 		rt.Post("/api/v1/servers/{id}/files/delete", h.Delete)
 		rt.Post("/api/v1/servers/{id}/files/extract", h.Extract)
+	})
+}
+
+// registerUserRoutes mounts account administration. The RBAC service is
+// required to guard these routes; the user service rechecks every call.
+func registerUserRoutes(r chi.Router, deps Deps) {
+	h := &handlers.Users{Service: deps.Users, Log: deps.Log}
+	r.Group(func(rt chi.Router) {
+		rt.Use(middleware.Session(deps.Auth))
+		rt.Use(middleware.RequireAuth)
+		rt.With(middleware.RequirePermission(deps.RBAC, domain.PermUsersRead)).Get("/api/v1/users", h.List)
+		rt.With(middleware.RequirePermission(deps.RBAC, domain.PermUsersManage)).Post("/api/v1/users", h.Create)
+		rt.With(middleware.RequirePermission(deps.RBAC, domain.PermUsersRead)).Get("/api/v1/users/{id}", h.Get)
+		rt.With(middleware.RequirePermission(deps.RBAC, domain.PermUsersManage)).Patch("/api/v1/users/{id}", h.Update)
+		rt.With(middleware.RequirePermission(deps.RBAC, domain.PermUsersManage)).Delete("/api/v1/users/{id}", h.Delete)
+		rt.With(middleware.RequirePermission(deps.RBAC, domain.PermUsersManage)).Post("/api/v1/users/{id}/reset-password", h.ResetPassword)
+		rt.With(middleware.RequirePermission(deps.RBAC, domain.PermUsersManage)).Post("/api/v1/users/{id}/revoke-sessions", h.RevokeSessions)
+		rt.With(middleware.RequirePermission(deps.RBAC, domain.PermUsersRead)).Get("/api/v1/users/{id}/login-history", h.LoginHistory)
+	})
+}
+
+// registerAuditRoutes mounts the read-only audit trail.
+func registerAuditRoutes(r chi.Router, deps Deps) {
+	h := &handlers.Audit{Query: deps.AuditQuery, Log: deps.Log}
+	r.Group(func(rt chi.Router) {
+		rt.Use(middleware.Session(deps.Auth))
+		rt.Use(middleware.RequireAuth)
+		rt.With(middleware.RequirePermission(deps.RBAC, domain.PermAuditRead)).Get("/api/v1/audit", h.List)
+	})
+}
+
+// registerOpsRoutes mounts per-server monitoring and process management.
+// Object-level authorization lives in the services.
+func registerOpsRoutes(r chi.Router, deps Deps) {
+	r.Group(func(rt chi.Router) {
+		rt.Use(middleware.Session(deps.Auth))
+		rt.Use(middleware.RequireAuth)
+		if deps.Metrics != nil {
+			mh := &handlers.Metrics{Service: deps.Metrics, Log: deps.Log}
+			rt.Get("/api/v1/servers/{id}/metrics/latest", mh.Latest)
+			rt.Get("/api/v1/servers/{id}/metrics", mh.Range)
+			rt.Post("/api/v1/servers/{id}/metrics/collect", mh.Collect)
+		}
+		if deps.Processes != nil {
+			ph := &handlers.Processes{Service: deps.Processes, Log: deps.Log}
+			rt.Get("/api/v1/servers/{id}/processes", ph.List)
+			rt.Post("/api/v1/servers/{id}/processes/{pid}/signal", ph.Signal)
+		}
 	})
 }
 
