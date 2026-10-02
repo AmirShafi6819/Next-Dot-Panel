@@ -122,12 +122,12 @@ func openSQLite(ctx context.Context, cfg *config.Config, log logger) (*DB, error
 	pingCtx, cancel := context.WithTimeout(ctx, 10*time.Second)
 	defer cancel()
 	if err := db.PingContext(pingCtx); err != nil {
-		db.Close()
+		_ = db.Close()
 		return nil, fmt.Errorf("store: sqlite is not reachable at %s: %w", cfg.Database.SQLitePath, err)
 	}
 
 	if err := verifySQLitePragmas(ctx, db); err != nil {
-		db.Close()
+		_ = db.Close()
 		return nil, err
 	}
 
@@ -171,7 +171,7 @@ func verifySQLitePragmas(ctx context.Context, db *sql.DB) error {
 func (d *DB) Ping(ctx context.Context) error {
 	ctx, cancel := context.WithTimeout(ctx, 3*time.Second)
 	defer cancel()
-	return d.DB.PingContext(ctx)
+	return d.PingContext(ctx)
 }
 
 // Close shuts the pool down, waiting for in-flight queries to finish.

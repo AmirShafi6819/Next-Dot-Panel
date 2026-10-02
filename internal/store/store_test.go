@@ -124,7 +124,7 @@ func forEachDialect(t *testing.T, fn func(t *testing.T, db *DB)) {
 		if err != nil {
 			t.Fatalf("open sqlite: %v", err)
 		}
-		t.Cleanup(func() { db.Close() })
+		t.Cleanup(func() { _ = db.Close() })
 		if err := Migrate(ctx, db, nil); err != nil {
 			t.Fatalf("migrate sqlite: %v", err)
 		}
@@ -141,7 +141,7 @@ func forEachDialect(t *testing.T, fn func(t *testing.T, db *DB)) {
 		if err != nil {
 			t.Fatalf("open postgres: %v", err)
 		}
-		t.Cleanup(func() { db.Close() })
+		t.Cleanup(func() { _ = db.Close() })
 		if _, err := db.ExecContext(ctx, "DROP SCHEMA IF EXISTS "+pgTestSchema+" CASCADE; CREATE SCHEMA "+pgTestSchema+";"); err != nil {
 			t.Fatalf("reset postgres schema: %v", err)
 		}
@@ -186,19 +186,37 @@ func TestMigrateCreatesSchema(t *testing.T) {
 			t.Fatalf("schema version = %d, want at least 1", version)
 		}
 
-		want := []string{
-			"users", "roles", "permissions", "role_permissions", "user_roles",
-			"sessions", "servers", "server_credentials", "server_host_keys",
-			"tags", "server_tags", "server_permissions",
-			"audit_logs", "login_history", "application_logs",
-			"metric_samples", "metric_aggregates", "metric_filesystems",
-			"terminal_sessions", "jobs", "api_tokens", "settings",
-			"notification_channels", "notifications", "backups",
+		checks := []string{
+			"SELECT count(*) FROM users",
+			"SELECT count(*) FROM roles",
+			"SELECT count(*) FROM permissions",
+			"SELECT count(*) FROM role_permissions",
+			"SELECT count(*) FROM user_roles",
+			"SELECT count(*) FROM sessions",
+			"SELECT count(*) FROM servers",
+			"SELECT count(*) FROM server_credentials",
+			"SELECT count(*) FROM server_host_keys",
+			"SELECT count(*) FROM tags",
+			"SELECT count(*) FROM server_tags",
+			"SELECT count(*) FROM server_permissions",
+			"SELECT count(*) FROM audit_logs",
+			"SELECT count(*) FROM login_history",
+			"SELECT count(*) FROM application_logs",
+			"SELECT count(*) FROM metric_samples",
+			"SELECT count(*) FROM metric_aggregates",
+			"SELECT count(*) FROM metric_filesystems",
+			"SELECT count(*) FROM terminal_sessions",
+			"SELECT count(*) FROM jobs",
+			"SELECT count(*) FROM api_tokens",
+			"SELECT count(*) FROM settings",
+			"SELECT count(*) FROM notification_channels",
+			"SELECT count(*) FROM notifications",
+			"SELECT count(*) FROM backups",
 		}
-		for _, table := range want {
+		for _, q := range checks {
 			var n int
-			if err := row(t, db, "SELECT count(*) FROM "+table).Scan(&n); err != nil {
-				t.Errorf("table %s is not usable: %v", table, err)
+			if err := row(t, db, q).Scan(&n); err != nil {
+				t.Errorf("query failed: %s: %v", q, err)
 			}
 		}
 	})

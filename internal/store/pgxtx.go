@@ -58,7 +58,7 @@ type sqlRowsAdapter struct {
 }
 
 func (r *sqlRowsAdapter) Close() {
-	r.rows.Close()
+	_ = r.rows.Close()
 }
 
 func (r *sqlRowsAdapter) Err() error {

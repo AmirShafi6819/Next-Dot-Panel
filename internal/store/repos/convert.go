@@ -31,11 +31,6 @@ func optIDValue(id *domain.UserID) *int64 {
 	return optID(id)
 }
 
-// optServerIDValue is an alias for optServerID, kept for backward compatibility.
-func optServerIDValue(id *domain.ServerID) *int64 {
-	return optServerID(id)
-}
-
 // nullString passes an optional string filter straight through: with
 // sql_package pgx/v5, sqlc emits *string for sqlc.narg text columns.
 func nullString(p *string) *string {
@@ -66,14 +61,6 @@ func i32(v int64) int32 {
 // sql_package pgx/v5, sqlc emits *string for sqlc.narg text columns, matching
 // the neutral interface exactly.
 
-func ptrFromPassString(p *string) *string {
-	return p
-}
-
-func ptrFromPassTime(p *time.Time) *time.Time {
-	return p
-}
-
 func ptrFromNullString(p *string) *string {
 	return p
 }
@@ -84,19 +71,6 @@ func ptrFromNullTime(p *time.Time) *time.Time {
 
 // jsonOr substitutes a valid JSON literal when the caller supplied none, so a
 // NOT NULL jsonb/json column never receives an empty byte slice.
-// nullStringPass passes an optional string filter straight through: with
-// sql_package pgx/v5 the postgres generator emits *string for sqlc.narg text
-// columns, and the sqlite generator does the same, so no conversion is needed.
-func nullStringPass(p *string) *string {
-	return p
-}
-
-// nullTimePass passes an optional timestamp filter straight through for the
-// same reason.
-func nullTimePass(p *time.Time) *time.Time {
-	return p
-}
-
 func jsonOr(v []byte, fallback string) []byte {
 	if len(v) == 0 {
 		return []byte(fallback)

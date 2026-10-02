@@ -41,7 +41,7 @@ func newTestRouter(t *testing.T, deps httpapi.Deps) (http.Handler, *store.DB, st
 	if err != nil {
 		t.Fatalf("open sqlite: %v", err)
 	}
-	t.Cleanup(func() { db.Close() })
+	t.Cleanup(func() { _ = db.Close() })
 	if err := store.Migrate(context.Background(), db, nil); err != nil {
 		t.Fatalf("migrate: %v", err)
 	}
@@ -214,7 +214,7 @@ func TestAccessLogCarriesTheResponseRequestId(t *testing.T) {
 	if err != nil {
 		t.Fatalf("open sqlite: %v", err)
 	}
-	t.Cleanup(func() { db.Close() })
+	t.Cleanup(func() { _ = db.Close() })
 	if err := store.Migrate(context.Background(), db, nil); err != nil {
 		t.Fatalf("migrate: %v", err)
 	}

@@ -37,7 +37,7 @@ func openSQLite(t *testing.T) (*store.DB, Queries) {
 	if err != nil {
 		t.Fatalf("open: %v", err)
 	}
-	t.Cleanup(func() { db.Close() })
+	t.Cleanup(func() { _ = db.Close() })
 	if err := store.Migrate(ctx, db, nil); err != nil {
 		t.Fatalf("migrate: %v", err)
 	}
@@ -442,7 +442,7 @@ func TestAuditInsertAndQuery(t *testing.T) {
 	if _, err := q.InsertAuditTx(ctx, tx, InsertAuditParams{
 		Action: domain.ActionLogout, Result: domain.ResultSuccess, RequestID: "req-2",
 	}); err != nil {
-		tx.Rollback()
+		_ = tx.Rollback()
 		t.Fatalf("InsertAuditTx: %v", err)
 	}
 	if err := tx.Commit(); err != nil {
@@ -460,10 +460,10 @@ func TestAuditInsertAndQuery(t *testing.T) {
 	if _, err := q.InsertAuditTx(ctx, tx2, InsertAuditParams{
 		Action: domain.ActionLogout, Result: domain.ResultSuccess, RequestID: "req-3",
 	}); err != nil {
-		tx2.Rollback()
+		_ = tx2.Rollback()
 		t.Fatalf("InsertAuditTx: %v", err)
 	}
-	tx2.Rollback()
+	_ = tx2.Rollback()
 	if n, err := q.CountAudit(ctx, AuditQueryParams{}); err != nil || n != 2 {
 		t.Fatalf("rolled-back insert leaked: count = %d, %v", n, err)
 	}
@@ -617,7 +617,7 @@ func TestPostgresParity(t *testing.T) {
 	if err != nil {
 		t.Fatalf("open postgres: %v", err)
 	}
-	t.Cleanup(func() { db.Close() })
+	t.Cleanup(func() { _ = db.Close() })
 	if _, err := db.ExecContext(ctx, "DROP SCHEMA IF EXISTS "+pgReposTestSchema+" CASCADE; CREATE SCHEMA "+pgReposTestSchema+";"); err != nil {
 		t.Fatalf("reset: %v", err)
 	}

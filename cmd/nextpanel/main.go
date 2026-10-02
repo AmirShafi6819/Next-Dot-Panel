@@ -46,7 +46,7 @@ func run(ctx context.Context, args []string, stdout, stderr io.Writer) int {
 			printUsage(stdout)
 			return 0
 		default:
-			fmt.Fprintf(stderr, "nextpanel: unknown command %q\n\n", args[0])
+			_, _ = fmt.Fprintf(stderr, "nextpanel: unknown command %q\n\n", args[0])
 			printUsage(stderr)
 			return 2
 		}
@@ -63,7 +63,7 @@ func serve(ctx context.Context, stdout, stderr io.Writer) int {
 	if err != nil {
 		// Configuration problems are aggregated and secret-free, so they go
 		// straight to the operator.
-		fmt.Fprintln(stderr, err)
+		_, _ = fmt.Fprintln(stderr, err)
 		return 1
 	}
 	log := logging.New(stdout, cfg.App.LogFormat, cfg.App.LogLevel)
@@ -78,7 +78,7 @@ func serve(ctx context.Context, stdout, stderr io.Writer) int {
 		log.Error(ctx, "startup check failed", "check", "database", "error", err)
 		return 1
 	}
-	defer db.Close()
+	defer func() { _ = db.Close() }()
 
 	if err := store.Migrate(ctx, db, log); err != nil {
 		log.Error(ctx, "startup check failed", "check", "migrations", "error", err)
@@ -145,6 +145,8 @@ func checkDataDir(dir string) error {
 		return fmt.Errorf("create data directory: %w", err)
 	}
 	probe := filepath.Join(dir, ".write-probe")
+	// #nosec G304 -- probe is a fixed name joined onto NEXT_PANEL_DATA_DIR,
+	// which configuration validation has already accepted.
 	f, err := os.OpenFile(probe, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0o600)
 	if err != nil {
 		return fmt.Errorf("data directory is not writable: %w", err)
@@ -166,19 +168,19 @@ func checkDataDir(dir string) error {
 // configuration error for a missing encryption key tells the operator to run
 // exactly this (Design Spec §33.5).
 func cryptoCommand(args []string, stdout, stderr io.Writer) int {
-	switch {
-	case len(args) == 1 && args[0] == "generate-key":
-		var key [32]byte
-		if _, err := rand.Read(key[:]); err != nil {
-			fmt.Fprintf(stderr, "nextpanel: generate key: %v\n", err)
-			return 1
+	if len(args) > 0 {
+		if args[0] == "generate-key" && len(args) == 1 {
+			var key [32]byte
+			if _, err := rand.Read(key[:]); err != nil {
+				_, _ = fmt.Fprintf(stderr, "nextpanel: generate key: %v\n", err)
+				return 1
+			}
+			_, _ = fmt.Fprintln(stdout, base64.StdEncoding.EncodeToString(key[:]))
+			return 0
 		}
-		fmt.Fprintln(stdout, base64.StdEncoding.EncodeToString(key[:]))
-		return 0
-	default:
-		fmt.Fprintln(stderr, "usage: nextpanel crypto generate-key")
-		return 2
 	}
+	_, _ = fmt.Fprintln(stderr, "usage: nextpanel crypto generate-key")
+	return 2
 }
 
 func printVersion(stdout io.Writer) int {
@@ -191,7 +193,7 @@ func printVersion(stdout io.Writer) int {
 }
 
 func printUsage(w io.Writer) {
-	fmt.Fprint(w, `Next.Panel — self-hosted server control panel.
+	_, _ = fmt.Fprint(w, `Next.Panel — self-hosted server control panel.
 
 usage:
   nextpanel                      run the server (configuration from environment)
