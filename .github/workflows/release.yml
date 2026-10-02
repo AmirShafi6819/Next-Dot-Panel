@@ -79,7 +79,7 @@ jobs:
             tar -czf "${dir}.tar.gz" "$dir"
           fi
       - name: Upload artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: nextpanel-${{ matrix.goos }}-${{ matrix.goarch }}
           path: |
