@@ -26,7 +26,7 @@ jobs:
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-go@v5
+      - uses: actions/setup-go@v7
         with:
           go-version: stable
       - name: gofmt
@@ -61,7 +61,7 @@ jobs:
         go-version: ["1.26.x", "1.27.x"]
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-go@v5
+      - uses: actions/setup-go@v7
         with:
           go-version: ${{ matrix.go-version }}
       # The Go binary embeds web/dist, so the frontend must be built first —
@@ -101,7 +101,7 @@ jobs:
       TEST_DATABASE_URL: postgres://nextpanel_test:nextpanel_test@127.0.0.1:5432/nextpanel_test?sslmode=disable
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-go@v5
+      - uses: actions/setup-go@v7
         with:
           go-version: stable
       # Same ordering reason as the test job: embed the real UI before building.
@@ -122,7 +122,7 @@ jobs:
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-go@v5
+      - uses: actions/setup-go@v7
         with:
           go-version: stable
       - name: Install sqlc
