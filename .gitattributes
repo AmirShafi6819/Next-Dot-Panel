@@ -1,0 +1,32 @@
+# Normalise line endings on checkout and commit.
+#
+# This is not cosmetic. sqlc's SQLite parser fails on CRLF input with a
+# misleading "extraneous input 'RETURNINGid'" error: it concatenates the
+# table's id column onto the RETURNING keyword when the newline is \r\n.
+# Without this file, a Windows checkout breaks `sqlc generate` for every
+# developer on the team.
+* text=auto eol=lf
+
+# Explicit, so the migration and query files can never pick up CRLF.
+*.sql  text eol=lf
+*.go   text eol=lf
+*.yaml text eol=lf
+*.yml  text eol=lf
+*.json text eol=lf
+*.md   text eol=lf
+*.ts   text eol=lf
+*.tsx  text eol=lf
+
+# Genuinely binary files.
+*.png  binary
+*.jpg  binary
+*.jpeg binary
+*.gif  binary
+*.ico  binary
+*.woff binary
+*.woff2 binary
+*.db   binary
+
+# Lockfiles are generated; excluding them keeps diffs quiet.
+go.sum      -diff
+package-lock.json -diff

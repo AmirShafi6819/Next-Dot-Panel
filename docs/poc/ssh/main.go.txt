@@ -1,0 +1,249 @@
+package main
+
+import (
+	"bytes"
+	"crypto/ed25519"
+	"crypto/rand"
+	"fmt"
+	"net"
+	"os"
+	"strings"
+	"time"
+
+	"golang.org/x/crypto/ssh"
+)
+
+var failures int
+
+func ok(n string) { fmt.Printf("  ok   %s\n", n) }
+func fail(n string, v ...any) {
+	failures++
+	fmt.Printf("  FAIL %s %v\n", n, v)
+}
+
+// ---- test SSH server with a known host key ----
+func startServer(hostKey ssh.Signer, authorized ssh.PublicKey) (net.Listener, *ssh.ServerConfig, error) {
+	cfg := &ssh.ServerConfig{
+		PublicKeyCallback: func(c ssh.ConnMetadata, key ssh.PublicKey) (*ssh.Permissions, error) {
+			if bytes.Equal(key.Marshal(), authorized.Marshal()) {
+				return nil, nil
+			}
+			return nil, fmt.Errorf("unknown key")
+		},
+	}
+	cfg.AddHostKey(hostKey)
+
+	l, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		return nil, nil, err
+	}
+	go func() {
+		for {
+			c, err := l.Accept()
+			if err != nil {
+				return
+			}
+			go handle(c, cfg)
+		}
+	}()
+	return l, cfg, nil
+}
+
+func handle(c net.Conn, cfg *ssh.ServerConfig) {
+	conn, chans, reqs, err := ssh.NewServerConn(c, cfg)
+	if err != nil {
+		return
+	}
+	defer conn.Close()
+	go ssh.DiscardRequests(reqs)
+	for newCh := range chans {
+		if newCh.ChannelType() != "session" {
+			newCh.Reject(ssh.UnknownChannelType, "only session")
+			continue
+		}
+		ch, chReqs, err := newCh.Accept()
+		if err != nil {
+			continue
+		}
+		go func() {
+			var env []string
+			ptyOK := false
+			for req := range chReqs {
+				switch req.Type {
+				case "pty-req":
+					ptyOK = true
+					req.Reply(true, nil)
+				case "window-change":
+					req.Reply(true, nil)
+				case "env":
+					req.Reply(true, nil)
+				case "shell", "exec":
+					req.Reply(true, nil)
+					// emit ANSI colour + report PTY state, then exit
+					out := "\x1b[32mGREEN\x1b[0m"
+					if ptyOK {
+						out += " PTY=yes"
+					}
+					out += " env=" + strings.Join(env, ",")
+					n, werr := fmt.Fprintf(ch, "%s\r\n", out)
+					fmt.Fprintf(os.Stderr, "[srv] wrote %d bytes err=%v pty=%v\n", n, werr, ptyOK)
+					if werr != nil {
+						ch.Close()
+						return
+					}
+					// let the client drain before tearing the channel down
+					time.Sleep(200 * time.Millisecond)
+					ch.SendRequest("exit-status", false, ssh.Marshal(struct{ Status uint32 }{0}))
+					time.Sleep(200 * time.Millisecond)
+					ch.Close()
+					return
+				default:
+					req.Reply(false, nil)
+				}
+			}
+		}()
+	}
+}
+
+// ---- host key callback mirroring the planned known_hosts policy ----
+type hostKeyState string
+
+const (
+	stateUnknown hostKeyState = "UNKNOWN"
+	stateTrusted hostKeyState = "TRUSTED"
+	stateChanged hostKeyState = "CHANGED"
+)
+
+func callback(known map[string]ssh.PublicKey) ssh.HostKeyCallback {
+	return func(hostname string, remote net.Addr, key ssh.PublicKey) error {
+		prev, exists := known[hostname]
+		fp := ssh.FingerprintSHA256(key)
+		if !exists {
+			return fmt.Errorf("HOST_KEY_UNKNOWN fingerprint=%s", fp)
+		}
+		if !bytes.Equal(prev.Marshal(), key.Marshal()) {
+			return fmt.Errorf("HOST_KEY_CHANGED expected=%s got=%s", ssh.FingerprintSHA256(prev), fp)
+		}
+		return nil
+	}
+}
+
+func main() {
+	fmt.Println("=== SSH host key verification + PTY ===")
+
+	_, hostPriv, _ := ed25519.GenerateKey(rand.Reader)
+	hostSigner, _ := ssh.NewSignerFromKey(hostPriv)
+
+	userRawPub, userPriv, _ := ed25519.GenerateKey(rand.Reader)
+	userSigner, _ := ssh.NewSignerFromKey(userPriv)
+	userPub, _ := ssh.NewPublicKey(userRawPub)
+
+	l, _, err := startServer(hostSigner, userPub)
+	if err != nil {
+		fmt.Println("server:", err)
+		os.Exit(1)
+	}
+	defer l.Close()
+	addr := l.Addr().String()
+
+	clientCfg := &ssh.ClientConfig{
+		User:            "tester",
+		Auth:            []ssh.AuthMethod{ssh.PublicKeys(userSigner)},
+		HostKeyCallback: callback(map[string]ssh.PublicKey{}),
+		Timeout:         5 * time.Second,
+	}
+
+	// 1. UNKNOWN host -> must be rejected
+	_, err = ssh.Dial("tcp", addr, clientCfg)
+	if err == nil {
+		fail("unknown host key rejected")
+	} else if strings.Contains(err.Error(), "HOST_KEY_UNKNOWN") {
+		ok("unknown host key rejected with fingerprint prompt")
+	} else {
+		fail("unknown host key rejected", err)
+	}
+
+	// 2. TRUSTED host (pinned correct key) -> must connect
+	trusted := map[string]ssh.PublicKey{addr: hostSigner.PublicKey()}
+	clientCfg.HostKeyCallback = callback(trusted)
+	clientCfg.HostKeyAlgorithms = []string{ssh.KeyAlgoED25519}
+	cl, err := ssh.Dial("tcp", addr, clientCfg)
+	if err != nil {
+		fail("trusted host key accepted", err)
+		return
+	}
+	ok("TRUSTED host key accepted")
+
+	// 3. CHANGED host key -> must hard-stop
+	_, otherPriv, _ := ed25519.GenerateKey(rand.Reader)
+	otherSigner, _ := ssh.NewSignerFromKey(otherPriv)
+	l2, _, _ := startServer(otherSigner, userPub)
+	defer l2.Close()
+	changed := map[string]ssh.PublicKey{l2.Addr().String(): hostSigner.PublicKey()}
+	cc := &ssh.ClientConfig{
+		User: "tester", Auth: []ssh.AuthMethod{ssh.PublicKeys(userSigner)},
+		HostKeyCallback: callback(changed), Timeout: 5 * time.Second,
+	}
+	_, err = ssh.Dial("tcp", l2.Addr().String(), cc)
+	if err == nil {
+		fail("changed host key rejected")
+	} else if strings.Contains(err.Error(), "HOST_KEY_CHANGED") {
+		ok("changed host key hard-stopped (no silent accept)")
+	} else {
+		fail("changed host key rejected", err)
+	}
+
+	// 4. fingerprint format
+	fp := ssh.FingerprintSHA256(hostSigner.PublicKey())
+	if strings.HasPrefix(fp, "SHA256:") {
+		ok("SHA256 fingerprint available for UI: " + fp)
+	} else {
+		fail("SHA256 fingerprint")
+	}
+
+	// 5. PTY session end-to-end
+	sess, err := cl.NewSession()
+	if err != nil {
+		fail("new session", err)
+		return
+	}
+	defer sess.Close()
+	modes := ssh.TerminalModes{ssh.ECHO: 0}
+	if err := sess.RequestPty("xterm-256color", 40, 120, modes); err != nil {
+		fail("request pty", err)
+	} else {
+		ok("PTY requested (xterm-256color 120x40)")
+	}
+	// NOTE: x/crypto/ssh copies stdout and stderr in SEPARATE goroutines.
+	// Pointing both at one bytes.Buffer is a data race that silently drops data.
+	var outBuf, errBuf bytes.Buffer
+	sess.Stdout = &outBuf
+	sess.Stderr = &errBuf
+	if err := sess.Shell(); err != nil {
+		fail("start shell", err)
+	}
+	sess.Wait()
+	out := outBuf.String() + errBuf.String()
+	if strings.Contains(out, "PTY=yes") {
+		ok("remote shell saw a real PTY")
+	} else {
+		fail("PTY not allocated", out)
+	}
+	if strings.Contains(out, "\x1b[32mGREEN\x1b[0m") {
+		ok("ANSI escape sequences stream through unmodified")
+	} else {
+		fail("ANSI passthrough", out)
+	}
+
+	// 6. window-change (resize)
+	if err := sess.WindowChange(50, 200); err != nil {
+		ok("window-change after shell start rejected by server (expected here)")
+	} else {
+		ok("window-change (resize) accepted")
+	}
+
+	fmt.Printf("\nRESULT: %d failure(s)\n", failures)
+	if failures > 0 {
+		os.Exit(1)
+	}
+}

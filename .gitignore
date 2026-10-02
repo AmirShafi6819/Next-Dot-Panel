@@ -1,0 +1,30 @@
+# Binaries and build output
+/next-panel
+/nextpanel
+*.exe
+*.test
+*.out
+
+# Local configuration — never commit real secrets
+.env
+.env.*
+!.env.example
+
+# Runtime data
+/data/
+*.db
+*.db-shm
+*.db-wal
+*.sqlite
+*.sqlite3
+
+# Test and tooling output
+coverage.out
+coverage.html
+*.prof
+
+# Editor and OS files
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db

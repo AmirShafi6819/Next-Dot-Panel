@@ -1,0 +1,381 @@
+package main
+
+import (
+	"context"
+	"database/sql"
+	"fmt"
+	"os"
+	"sync"
+	"time"
+
+	"github.com/jackc/pgx/v5/pgxpool"
+
+	_ "github.com/ncruces/go-sqlite3/driver"
+
+	pg "sqlcpoc/gen/pg"
+	sqlite "sqlcpoc/gen/sqlite"
+)
+
+var failures int
+
+func ok(name string) { fmt.Printf("  ok   %s\n", name) }
+
+func check(name string, err error) {
+	if err != nil {
+		failures++
+		fmt.Printf("  FAIL %-48s %v\n", name, err)
+		return
+	}
+	ok(name)
+}
+
+// expectErr asserts an error occurred (constraint / no-rows cases).
+func expectErr(name string, err error) {
+	if err == nil {
+		failures++
+		fmt.Printf("  FAIL %-48s expected error, got nil\n", name)
+		return
+	}
+	ok(name + " [rejected as expected]")
+}
+
+func ptr(s string) *string    { return &s }
+func ptrF(f float64) *float64 { return &f }
+
+func pgRun() {
+	fmt.Println("\n=== PostgreSQL 16 ===")
+	ctx := context.Background()
+	pool, err := pgxpool.New(ctx, os.Getenv("PGURL"))
+	if err != nil {
+		fmt.Println("connect:", err)
+		failures++
+		return
+	}
+	defer pool.Close()
+
+	pool.Exec(ctx, "DROP TABLE IF EXISTS metric_samples, audit_logs, jobs, servers, users CASCADE")
+	schema, err := os.ReadFile("pg/schema.sql")
+	if err != nil {
+		fmt.Println("read schema:", err)
+		failures++
+		return
+	}
+	if _, err := pool.Exec(ctx, string(schema)); err != nil {
+		fmt.Println("schema:", err)
+		failures++
+		return
+	}
+	ok("schema applied (FKs, uniques, JSONB)")
+
+	q := pg.New(pool)
+
+	u, err := q.CreateUser(ctx, pg.CreateUserParams{Username: "admin", PasswordHash: "argon2id$fake", DisplayName: "Admin"})
+	check("insert + RETURNING *", err)
+	_, err = q.CreateUser(ctx, pg.CreateUserParams{Username: "admin", PasswordHash: "x", DisplayName: "dup"})
+	expectErr("unique constraint on username", err)
+
+	_, err = q.GetUserByUsername(ctx, "admin")
+	check("lookup by unique column", err)
+	_, err = q.GetUserByID(ctx, 999999)
+	expectErr("missing row returns ErrNoRows", err)
+
+	for i := 0; i < 5; i++ {
+		if _, err := q.CreateUser(ctx, pg.CreateUserParams{Username: fmt.Sprintf("u%d", i), PasswordHash: "x", DisplayName: "n"}); err != nil {
+			fmt.Println("seed:", err)
+		}
+	}
+	page, err := q.ListUsers(ctx, pg.ListUsersParams{Limit: 3, Offset: 0})
+	check(fmt.Sprintf("pagination LIMIT/OFFSET (3 of 6 -> got %d)", len(page)), err)
+	if len(page) != 3 {
+		failures++
+		fmt.Println("  FAIL pagination returned wrong count")
+	}
+
+	_, err = q.InsertAudit(ctx, pg.InsertAuditParams{
+		ActorID: &u.ID, Action: "LOGIN_SUCCESS", Target: ptr("web"),
+		Result: "success", RequestID: "req-1",
+		Metadata: []byte(`{"ip":"203.0.113.10"}`),
+	})
+	check("audit insert (NULLABLE actor + JSONB)", err)
+
+	_, err = q.InsertAudit(ctx, pg.InsertAuditParams{
+		ActorID: nil, Action: "LOGIN_FAILED", Target: ptr("web"),
+		Result: "failure", RequestID: "req-2", Metadata: []byte(`{}`),
+	})
+	check("audit insert with NULL actor", err)
+
+	all, err := q.ListAudit(ctx, pg.ListAuditParams{ActorID: nil, ServerID: nil, Limit: 10, Offset: 0})
+	check(fmt.Sprintf("filter w/ NULL param = all rows (got %d)", len(all)), err)
+
+	srv, err := q.CreateServer(ctx, pg.CreateServerParams{
+		Name: "vps1", Host: "203.0.113.10", Port: 22, Username: "root",
+		AuthMethod: "key", Tags: []byte(`["prod","web"]`), Notes: ptr("primary"),
+	})
+	check("server insert (JSONB tags + NULLABLE notes)", err)
+
+	err = q.UpsertMetric(ctx, pg.UpsertMetricParams{ServerID: 999999, Ts: time.Now(), CpuPct: ptrF(1)})
+	expectErr("FK violation rejected", err)
+
+	now := time.Now().UTC().Truncate(time.Second)
+	for i := 0; i < 3; i++ {
+		err = q.UpsertMetric(ctx, pg.UpsertMetricParams{ServerID: srv.ID, Ts: now, CpuPct: ptrF(float64(i)), MemUsed: ptrI(int64(i))})
+	}
+	check("upsert ON CONFLICT (3x same PK)", err)
+	var mc int
+	pool.QueryRow(ctx, "SELECT count(*) FROM metric_samples").Scan(&mc)
+	if mc != 1 {
+		failures++
+		fmt.Printf("  FAIL upsert duplicated rows: %d\n", mc)
+	} else {
+		ok("upsert idempotent -> 1 row")
+	}
+
+	_, err = q.UpdateServerStatusVersioned(ctx, pg.UpdateServerStatusVersionedParams{ID: srv.ID, Status: "online", Version: srv.Version})
+	check("optimistic lock UPDATE with version match", err)
+	_, err = q.UpdateServerStatusVersioned(ctx, pg.UpdateServerStatusVersionedParams{ID: srv.ID, Status: "stale", Version: srv.Version})
+	expectErr("stale version rejected", err)
+
+	for i := 0; i < 20; i++ {
+		pool.Exec(ctx, "INSERT INTO jobs (kind) VALUES ('metrics')")
+	}
+	var wg sync.WaitGroup
+	var mu sync.Mutex
+	claimed := map[int64]int{}
+	for w := 0; w < 8; w++ {
+		wg.Add(1)
+		go func(w int) {
+			defer wg.Done()
+			for {
+				j, err := q.ClaimJob(ctx, ptr(fmt.Sprintf("worker-%d", w)))
+				if err != nil {
+					return
+				}
+				mu.Lock()
+				claimed[j.ID]++
+				mu.Unlock()
+			}
+		}(w)
+	}
+	wg.Wait()
+	dupes := 0
+	for _, c := range claimed {
+		if c > 1 {
+			dupes++
+		}
+	}
+	if dupes != 0 {
+		failures++
+		fmt.Printf("  FAIL FOR UPDATE SKIP LOCKED: %d double-claimed\n", dupes)
+	} else {
+		ok(fmt.Sprintf("FOR UPDATE SKIP LOCKED: %d jobs claimed, 0 double-claimed", len(claimed)))
+	}
+
+	var wg2 sync.WaitGroup
+	var mu2 sync.Mutex
+	errs := 0
+	for w := 0; w < 20; w++ {
+		wg2.Add(1)
+		go func(w int) {
+			defer wg2.Done()
+			if _, err := q.CreateServer(ctx, pg.CreateServerParams{
+				Name: fmt.Sprintf("s%d", w), Host: "h", Port: 22, Username: "u",
+				AuthMethod: "key", Tags: []byte(`[]`),
+			}); err != nil {
+				mu2.Lock()
+				errs++
+				mu2.Unlock()
+			}
+		}(w)
+	}
+	wg2.Wait()
+	if errs != 0 {
+		failures++
+		fmt.Printf("  FAIL 20 concurrent inserts had %d errors\n", errs)
+	} else {
+		ok("20 concurrent inserts, 0 errors")
+	}
+
+	tx, _ := pool.Begin(ctx)
+	tx.Exec(ctx, "INSERT INTO users (username,password_hash) VALUES ('txuser','x')")
+	tx.Rollback(ctx)
+	_, err = q.GetUserByUsername(ctx, "txuser")
+	expectErr("transaction rollback leaves no row", err)
+
+	err = q.DeleteMetricBefore(ctx, time.Now().Add(time.Hour))
+	check("retention DELETE by timestamp", err)
+
+	done := make(chan struct{})
+	go func() { pool.Close(); close(done) }()
+	select {
+	case <-done:
+		ok("graceful pool shutdown")
+	case <-time.After(5 * time.Second):
+		failures++
+		fmt.Println("  FAIL pool shutdown hung")
+	}
+}
+
+func sqliteRun() {
+	fmt.Println("\n=== SQLite (ncruces pure-Go, no CGO) ===")
+	ctx := context.Background()
+	dir, _ := os.MkdirTemp("", "poc")
+	defer os.RemoveAll(dir)
+
+	dsn := "file:" + dir + "/poc.db?_pragma=journal_mode(WAL)&_pragma=busy_timeout(5000)&_pragma=foreign_keys(1)&_pragma=synchronous(NORMAL)"
+	db, err := sql.Open("sqlite3", dsn)
+	if err != nil {
+		fmt.Println("open:", err)
+		failures++
+		return
+	}
+	defer db.Close()
+	db.SetMaxOpenConns(1)
+
+	var jm string
+	db.QueryRowContext(ctx, "PRAGMA journal_mode").Scan(&jm)
+	var fk int
+	db.QueryRowContext(ctx, "PRAGMA foreign_keys").Scan(&fk)
+	var bt int
+	db.QueryRowContext(ctx, "PRAGMA busy_timeout").Scan(&bt)
+	if jm == "wal" && fk == 1 && bt == 5000 {
+		ok(fmt.Sprintf("pragmas applied (journal=%s fk=%d busy=%d)", jm, fk, bt))
+	} else {
+		failures++
+		fmt.Printf("  FAIL pragmas (journal=%s fk=%d busy=%d)\n", jm, fk, bt)
+	}
+
+	schema, _ := os.ReadFile("sqlite/schema.sql")
+	if _, err := db.ExecContext(ctx, string(schema)); err != nil {
+		fmt.Println("schema:", err)
+		failures++
+		return
+	}
+	ok("schema applied")
+
+	q := sqlite.New(db)
+
+	u, err := q.CreateUser(ctx, sqlite.CreateUserParams{Username: "admin", PasswordHash: "argon2id$fake", DisplayName: "Admin"})
+	check("insert + RETURNING *", err)
+	_, err = q.CreateUser(ctx, sqlite.CreateUserParams{Username: "admin", PasswordHash: "x", DisplayName: "dup"})
+	expectErr("unique constraint on username", err)
+
+	_, err = q.GetUserByUsername(ctx, "admin")
+	check("lookup by unique column", err)
+
+	for i := 0; i < 5; i++ {
+		q.CreateUser(ctx, sqlite.CreateUserParams{Username: fmt.Sprintf("u%d", i), PasswordHash: "x", DisplayName: "n"})
+	}
+	page, err := q.ListUsers(ctx, sqlite.ListUsersParams{Limit: 3, Offset: 0})
+	check(fmt.Sprintf("pagination LIMIT/OFFSET (got %d)", len(page)), err)
+
+	_, err = q.InsertAudit(ctx, sqlite.InsertAuditParams{
+		ActorID: &u.ID, Action: "LOGIN_SUCCESS", Target: ptr("web"),
+		Result: "success", RequestID: "req-1", Metadata: []byte(`{"ip":"203.0.113.10"}`),
+	})
+	check("audit insert (NULLABLE actor + JSON)", err)
+
+	all, err := q.ListAudit(ctx, sqlite.ListAuditParams{ActorID: nil, ServerID: nil, Limit: 10, Offset: 0})
+	check(fmt.Sprintf("filter w/ NULL param = all rows (got %d)", len(all)), err)
+
+	srv, err := q.CreateServer(ctx, sqlite.CreateServerParams{
+		Name: "vps1", Host: "203.0.113.10", Port: 22, Username: "root",
+		AuthMethod: "key", Tags: []byte(`["prod","web"]`), Notes: ptr("primary"),
+	})
+	check("server insert (JSON tags + NULLABLE notes)", err)
+
+	err = q.UpsertMetric(ctx, sqlite.UpsertMetricParams{ServerID: 999999, Ts: time.Now(), CpuPct: ptrF(1)})
+	expectErr("FK violation rejected", err)
+
+	nowStr := time.Now().UTC().Truncate(time.Second)
+	for i := 0; i < 3; i++ {
+		err = q.UpsertMetric(ctx, sqlite.UpsertMetricParams{ServerID: srv.ID, Ts: nowStr, CpuPct: ptrF(float64(i)), MemUsed: ptrI(int64(i))})
+	}
+	check("upsert ON CONFLICT (3x same PK)", err)
+	var mc int
+	db.QueryRowContext(ctx, "SELECT count(*) FROM metric_samples").Scan(&mc)
+	if mc != 1 {
+		failures++
+		fmt.Printf("  FAIL upsert duplicated rows: %d\n", mc)
+	} else {
+		ok("upsert idempotent -> 1 row")
+	}
+
+	_, err = q.UpdateServerStatusVersioned(ctx, sqlite.UpdateServerStatusVersionedParams{ID: srv.ID, Status: "online", Version: srv.Version})
+	check("optimistic lock UPDATE with version match", err)
+	_, err = q.UpdateServerStatusVersioned(ctx, sqlite.UpdateServerStatusVersionedParams{ID: srv.ID, Status: "stale", Version: srv.Version})
+	expectErr("stale version rejected", err)
+
+	for i := 0; i < 20; i++ {
+		db.ExecContext(ctx, "INSERT INTO jobs (kind) VALUES ('metrics')")
+	}
+	claimed := map[int64]int{}
+	var mu sync.Mutex
+	for w := 0; w < 8; w++ {
+		for {
+			j, err := q.ClaimJob(ctx, ptr(fmt.Sprintf("worker-%d", w)))
+			if err != nil {
+				break
+			}
+			mu.Lock()
+			claimed[j.ID]++
+			mu.Unlock()
+		}
+	}
+	dupes := 0
+	for _, c := range claimed {
+		if c > 1 {
+			dupes++
+		}
+	}
+	if dupes != 0 {
+		failures++
+		fmt.Printf("  FAIL sqlite job claim double-claimed %d\n", dupes)
+	} else {
+		ok(fmt.Sprintf("job claim (single-writer): %d of 20 claimed, 0 double", len(claimed)))
+	}
+
+	var wg sync.WaitGroup
+	var mu2 sync.Mutex
+	errs := 0
+	for w := 0; w < 20; w++ {
+		wg.Add(1)
+		go func(w int) {
+			defer wg.Done()
+			if _, err := q.CreateServer(ctx, sqlite.CreateServerParams{
+				Name: fmt.Sprintf("s%d", w), Host: "h", Port: 22, Username: "u",
+				AuthMethod: "key", Tags: []byte(`[]`),
+			}); err != nil {
+				mu2.Lock()
+				errs++
+				mu2.Unlock()
+			}
+		}(w)
+	}
+	wg.Wait()
+	if errs != 0 {
+		failures++
+		fmt.Printf("  FAIL 20 concurrent inserts via 1 writer had %d errors\n", errs)
+	} else {
+		ok("20 concurrent inserts via 1 writer, 0 errors")
+	}
+
+	tx, _ := db.BeginTx(ctx, nil)
+	tx.ExecContext(ctx, "INSERT INTO users (username,password_hash) VALUES ('txuser','x')")
+	tx.Rollback()
+	_, err = q.GetUserByUsername(ctx, "txuser")
+	expectErr("transaction rollback leaves no row", err)
+
+	err = q.DeleteMetricBefore(ctx, time.Now().Add(time.Hour))
+	check("retention DELETE by timestamp", err)
+}
+
+func ptrI(i int64) *int64 { return &i }
+
+func main() {
+	pgRun()
+	sqliteRun()
+	fmt.Printf("\nRESULT: %d failure(s)\n", failures)
+	if failures > 0 {
+		os.Exit(1)
+	}
+}

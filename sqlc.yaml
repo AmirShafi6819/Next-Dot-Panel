@@ -1,0 +1,252 @@
+version: "2"
+
+# Next.Panel generates its SQL layer for both supported dialects from one
+# logical query set. Each query is written twice, differing only in mechanical
+# dialect substitutions:
+#
+#   placeholders   $1        ->  ?1
+#   current time   now()     ->  strftime('%Y-%m-%dT%H:%M:%fZ','now')
+#   row locking    FOR UPDATE SKIP LOCKED  ->  (omitted; SQLite has no equivalent)
+#
+# Anything beyond those three substitutions belongs in the hand-written adapter
+# layer instead, because the generated Go types differ between dialects.
+#
+# The `overrides` blocks are REQUIRED, not stylistic. Without them sqlc maps
+# SQLite JSON columns to jsontext.Value, whose Scan rejects the string the
+# driver returns, and timestamp columns to string. Both cause runtime scan
+# failures -- and in the ClaimJob case the UPDATE has already committed by the
+# time the scan fails, silently stranding the job. See docs/research.md §1.4.
+
+sql:
+  - engine: "postgresql"
+    schema: "internal/store/migrations/postgres"
+    queries: "internal/store/queries/postgres"
+    gen:
+      go:
+        package: "storepg"
+        out: "internal/store/postgres"
+        sql_package: "pgx/v5"
+        emit_json_tags: true
+        emit_pointers_for_null_types: true
+        emit_empty_slices: true
+        emit_interface: false
+        overrides:
+          - db_type: "jsonb"
+            go_type:
+              type: "byte"
+              slice: true
+          # Nullable timestamps must be pointers: scanning SQL NULL into a
+          # plain time.Time fails, and the failure surfaces only when a row
+          # actually has NULL in that column.
+          - db_type: "timestamptz"
+            go_type:
+              import: "time"
+              type: "Time"
+              pointer: true
+            nullable: true
+          - db_type: "timestamptz"
+            go_type: "time.Time"
+
+  - engine: "sqlite"
+    schema: "internal/store/migrations/sqlite"
+    queries: "internal/store/queries/sqlite"
+    gen:
+      go:
+        package: "storesqlite"
+        out: "internal/store/sqlite"
+        emit_json_tags: true
+        emit_pointers_for_null_types: true
+        emit_empty_slices: true
+        emit_interface: false
+        overrides:
+          # JSON columns: the driver returns these as string, so scan into []byte.
+          - column: "servers.tags"
+            go_type:
+              type: "byte"
+              slice: true
+          - column: "audit_logs.metadata"
+            go_type:
+              type: "byte"
+              slice: true
+          - column: "jobs.payload"
+            go_type:
+              type: "byte"
+              slice: true
+          - column: "application_logs.fields"
+            go_type:
+              type: "byte"
+              slice: true
+          - column: "api_tokens.scopes"
+            go_type:
+              type: "byte"
+              slice: true
+          - column: "settings.value"
+            go_type:
+              type: "byte"
+              slice: true
+          - column: "notification_channels.config"
+            go_type:
+              type: "byte"
+              slice: true
+
+          # Timestamps stored as TEXT in a canonical RFC3339 form that is
+          # lexicographically ordered and directly comparable.
+          # NOTE (sqlite nullable timestamps): these MUST generate as *string.
+          # The ncruces SQLite driver returns TEXT columns as Go string, and
+          # database/sql cannot scan a string into **time.Time (it fails with
+          # "unsupported Scan, storing driver.Value type string into type
+          # *time.Time"), nor can it scan NULL into a plain string. So every
+          # nullable timestamp is *string: the sqlite adapter parses reads with
+          # parseSQLiteTimePtr and formats writes with formatSQLiteTimePtr.
+          # Non-nullable TEXT timestamps scan into time.Time without issue and
+          # are left alone. See docs/research.md F5.
+          - column: "users.last_login_at"
+            go_type:
+              type: "string"
+              pointer: true
+            nullable: true
+          - column: "users.created_at"
+            go_type: "time.Time"
+          - column: "users.updated_at"
+            go_type: "time.Time"
+          - column: "users.deleted_at"
+            go_type:
+              type: "string"
+              pointer: true
+            nullable: true
+          - column: "roles.created_at"
+            go_type: "time.Time"
+          - column: "roles.updated_at"
+            go_type: "time.Time"
+          - column: "user_roles.granted_at"
+            go_type: "time.Time"
+          - column: "sessions.created_at"
+            go_type: "time.Time"
+          - column: "sessions.last_seen_at"
+            go_type: "time.Time"
+          - column: "sessions.expires_at"
+            go_type: "time.Time"
+          - column: "sessions.revoked_at"
+            go_type:
+              type: "string"
+              pointer: true
+            nullable: true
+          - column: "servers.created_at"
+            go_type: "time.Time"
+          - column: "servers.updated_at"
+            go_type: "time.Time"
+          - column: "servers.last_seen_at"
+            go_type:
+              type: "string"
+              pointer: true
+            nullable: true
+          - column: "servers.last_error_at"
+            go_type:
+              type: "string"
+              pointer: true
+            nullable: true
+          - column: "server_credentials.created_at"
+            go_type: "time.Time"
+          - column: "server_credentials.rotated_at"
+            go_type:
+              type: "string"
+              pointer: true
+            nullable: true
+          - column: "server_host_keys.first_seen"
+            go_type: "time.Time"
+          - column: "server_host_keys.trusted_at"
+            go_type:
+              type: "string"
+              pointer: true
+            nullable: true
+          - column: "tags.created_at"
+            go_type: "time.Time"
+          - column: "server_permissions.granted_at"
+            go_type: "time.Time"
+          - column: "audit_logs.ts"
+            go_type: "time.Time"
+          - column: "login_history.ts"
+            go_type: "time.Time"
+          - column: "application_logs.ts"
+            go_type: "time.Time"
+          - column: "metric_samples.ts"
+            go_type: "time.Time"
+          - column: "metric_aggregates.ts"
+            go_type: "time.Time"
+          - column: "metric_filesystems.ts"
+            go_type: "time.Time"
+          - column: "terminal_sessions.opened_at"
+            go_type: "time.Time"
+          - column: "terminal_sessions.closed_at"
+            go_type:
+              type: "string"
+              pointer: true
+            nullable: true
+          - column: "jobs.run_at"
+            go_type: "time.Time"
+          - column: "jobs.locked_at"
+            go_type:
+              type: "string"
+              pointer: true
+            nullable: true
+          - column: "jobs.created_at"
+            go_type: "time.Time"
+          - column: "jobs.updated_at"
+            go_type: "time.Time"
+          - column: "jobs.finished_at"
+            go_type:
+              type: "string"
+              pointer: true
+            nullable: true
+          - column: "api_tokens.created_at"
+            go_type: "time.Time"
+          - column: "api_tokens.expires_at"
+            go_type:
+              type: "string"
+              pointer: true
+            nullable: true
+          - column: "api_tokens.last_used_at"
+            go_type:
+              type: "string"
+              pointer: true
+            nullable: true
+          - column: "api_tokens.revoked_at"
+            go_type:
+              type: "string"
+              pointer: true
+            nullable: true
+          - column: "settings.updated_at"
+            go_type: "time.Time"
+          - column: "notification_channels.created_at"
+            go_type: "time.Time"
+          - column: "notification_channels.updated_at"
+            go_type: "time.Time"
+          - column: "notifications.ts"
+            go_type: "time.Time"
+          - column: "notifications.created_at"
+            go_type: "time.Time"
+          - column: "backups.started_at"
+            go_type: "time.Time"
+          - column: "backups.finished_at"
+            go_type:
+              type: "string"
+              pointer: true
+            nullable: true
+
+          # Booleans stored as INTEGER 0/1.
+          - column: "users.is_active"
+            go_type: "bool"
+          - column: "users.is_bootstrap_default"
+            go_type: "bool"
+          - column: "users.must_change_password"
+            go_type: "bool"
+          - column: "roles.is_system"
+            go_type: "bool"
+          - column: "servers.is_favourite"
+            go_type: "bool"
+          - column: "login_history.success"
+            go_type: "bool"
+          - column: "notification_channels.is_enabled"
+            go_type: "bool"
+          - column: "notifications.is_read"
+            go_type: "bool"

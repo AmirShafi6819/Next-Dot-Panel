@@ -1,0 +1,55 @@
+version: "2"
+sql:
+  - engine: "postgresql"
+    schema: "pg/schema.sql"
+    queries: "pg/queries.sql"
+    gen:
+      go:
+        package: "storepg"
+        out: "gen/pg"
+        sql_package: "pgx/v5"
+        emit_json_tags: true
+        emit_pointers_for_null_types: true
+        overrides:
+          - db_type: "jsonb"
+            go_type:
+              type: "byte"
+              slice: true
+          - db_type: "timestamptz"
+            go_type: "time.Time"
+  - engine: "sqlite"
+    schema: "sqlite/schema.sql"
+    queries: "sqlite/queries.sql"
+    gen:
+      go:
+        package: "storesqlite"
+        out: "gen/sqlite"
+        emit_json_tags: true
+        emit_pointers_for_null_types: true
+        overrides:
+          - column: "servers.tags"
+            go_type:
+              type: "byte"
+              slice: true
+          - column: "audit_logs.metadata"
+            go_type:
+              type: "byte"
+              slice: true
+          - column: "jobs.payload"
+            go_type:
+              type: "byte"
+              slice: true
+          - column: "users.created_at"
+            go_type: "time.Time"
+          - column: "users.updated_at"
+            go_type: "time.Time"
+          - column: "servers.created_at"
+            go_type: "time.Time"
+          - column: "audit_logs.ts"
+            go_type: "time.Time"
+          - column: "metric_samples.ts"
+            go_type: "time.Time"
+          - column: "jobs.run_at"
+            go_type: "time.Time"
+          - column: "jobs.created_at"
+            go_type: "time.Time"
