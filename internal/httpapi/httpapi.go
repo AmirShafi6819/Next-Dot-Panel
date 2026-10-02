@@ -18,6 +18,7 @@ import (
 	"github.com/ashaibery/Next-Dot-Panel/internal/httpapi/middleware"
 	"github.com/ashaibery/Next-Dot-Panel/internal/logging"
 	"github.com/ashaibery/Next-Dot-Panel/internal/rbac"
+	"github.com/ashaibery/Next-Dot-Panel/internal/server"
 	"github.com/ashaibery/Next-Dot-Panel/internal/store"
 )
 
@@ -33,6 +34,9 @@ type Deps struct {
 	// RBAC is the authorization and role-administration service. When nil the
 	// RBAC routes are not mounted.
 	RBAC *rbac.Service
+	// Servers is the managed-server service. When nil the server routes are not
+	// mounted.
+	Servers *server.Service
 	// Readiness collects the probes behind /ready. When nil a fresh set is
 	// created, so a caller that wants to register its own probe passes one in.
 	Readiness *handlers.Readiness
@@ -68,6 +72,9 @@ func New(deps Deps) http.Handler {
 	}
 	if deps.RBAC != nil {
 		registerRBACRoutes(r, deps)
+	}
+	if deps.Servers != nil {
+		registerServerRoutes(r, deps)
 	}
 
 	// Unmatched routes answer with the standard envelope rather than chi's
@@ -126,6 +133,25 @@ func registerRBACRoutes(r chi.Router, deps Deps) {
 
 		rt.With(middleware.RequirePermission(deps.RBAC, domain.PermUsersRead)).Get("/users/{id}/roles", h.ListUserRoles)
 		rt.With(middleware.RequirePermission(deps.RBAC, domain.PermUsersManage)).Put("/users/{id}/roles", h.SetUserRoles)
+	})
+}
+
+// registerServerRoutes mounts the managed-server endpoints. Object-level
+// authorization (including 404 for invisible servers) lives in the service, so
+// the router only requires an authenticated session.
+func registerServerRoutes(r chi.Router, deps Deps) {
+	h := &handlers.Servers{Service: deps.Servers, Log: deps.Log}
+	r.Group(func(rt chi.Router) {
+		rt.Use(middleware.Session(deps.Auth))
+		rt.Use(middleware.RequireAuth)
+		rt.Get("/api/v1/servers", h.List)
+		rt.Post("/api/v1/servers", h.Create)
+		rt.Get("/api/v1/servers/{id}", h.Get)
+		rt.Patch("/api/v1/servers/{id}", h.Update)
+		rt.Delete("/api/v1/servers/{id}", h.Delete)
+		rt.Post("/api/v1/servers/{id}/test", h.TestConnection)
+		rt.Get("/api/v1/servers/{id}/hostkeys", h.ListHostKeys)
+		rt.Post("/api/v1/servers/{id}/hostkeys/trust", h.TrustHostKey)
 	})
 }
 

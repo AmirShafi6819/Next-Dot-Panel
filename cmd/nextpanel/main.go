@@ -22,9 +22,13 @@ import (
 	"github.com/ashaibery/Next-Dot-Panel/internal/audit"
 	"github.com/ashaibery/Next-Dot-Panel/internal/auth"
 	"github.com/ashaibery/Next-Dot-Panel/internal/config"
+	"github.com/ashaibery/Next-Dot-Panel/internal/credentials"
+	"github.com/ashaibery/Next-Dot-Panel/internal/crypto"
 	"github.com/ashaibery/Next-Dot-Panel/internal/httpapi"
 	"github.com/ashaibery/Next-Dot-Panel/internal/logging"
+	"github.com/ashaibery/Next-Dot-Panel/internal/provider"
 	"github.com/ashaibery/Next-Dot-Panel/internal/rbac"
+	"github.com/ashaibery/Next-Dot-Panel/internal/server"
 	"github.com/ashaibery/Next-Dot-Panel/internal/store"
 	"github.com/ashaibery/Next-Dot-Panel/internal/store/repos"
 	"github.com/ashaibery/Next-Dot-Panel/internal/version"
@@ -117,6 +121,22 @@ func serve(ctx context.Context, stdout, stderr io.Writer) int {
 		return 1
 	}
 
+	encryptor, err := crypto.NewEncryptor(cfg.Security.EncryptionKey, cfg.Security.EncryptionKeyID, cfg.Security.PreviousKeys)
+	if err != nil {
+		log.Error(ctx, "startup check failed", "check", "encryption_key", "error", err)
+		return 1
+	}
+	auditWriter := audit.New(queries, log)
+	credStore := credentials.New(queries, encryptor)
+	registry := provider.NewRegistry(log)
+	defer registry.Close(context.Background())
+
+	serverSvc := server.New(queries, credStore, rbacSvc, registry, auditWriter, log, server.Options{
+		LocalExecutionEnabled: cfg.Features.LocalExecutionEnabled,
+		CommandTimeout:        cfg.Timeouts.Command,
+		MaxCommandOutputBytes: cfg.Limits.MaxCommandOutputBytes,
+	})
+
 	// Binding before serving makes an occupied port a startup failure with a
 	// clear message instead of a crash loop.
 	ln, err := net.Listen("tcp", cfg.App.ListenAddr)
@@ -125,7 +145,7 @@ func serve(ctx context.Context, stdout, stderr io.Writer) int {
 		return 1
 	}
 
-	handler := httpapi.New(httpapi.Deps{Config: cfg, DB: db, Log: log, Auth: authSvc, RBAC: rbacSvc})
+	handler := httpapi.New(httpapi.Deps{Config: cfg, DB: db, Log: log, Auth: authSvc, RBAC: rbacSvc, Servers: serverSvc})
 	srv := &http.Server{
 		Handler:           handler,
 		ReadHeaderTimeout: 10 * time.Second,

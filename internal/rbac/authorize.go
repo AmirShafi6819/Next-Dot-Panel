@@ -124,6 +124,20 @@ func (s *Service) CanSeeAllServers(actor auth.Actor) bool {
 	return domain.Has(actor.Permissions, domain.PermServersRead)
 }
 
+// CanSeeServer reports whether the actor may see one server: either they hold
+// servers.read globally, or they hold any explicit grant on that server. It is
+// used to turn an invisible object into a 404 rather than a 403.
+func (s *Service) CanSeeServer(ctx context.Context, actor auth.Actor, serverID domain.ServerID) (bool, error) {
+	if s.CanSeeAllServers(actor) {
+		return true, nil
+	}
+	grants, err := s.q.ListServerPermissions(ctx, actor.UserID, serverID)
+	if err != nil {
+		return false, fmt.Errorf("rbac: load server permissions: %w", err)
+	}
+	return len(grants) > 0, nil
+}
+
 // AccessibleServerIDs returns the servers the actor may see. It returns nil
 // with seeAll=true when the actor can see everything, so callers can skip the
 // filter entirely.

@@ -58,6 +58,18 @@ entries are invented.
   writes. HTTP: `/api/v1/roles`, `/api/v1/permissions` and
   `/api/v1/users/{id}/roles` behind a `RequirePermission` middleware. The
   bootstrap administrator is granted the admin role on first start.
+- **Phase 5 — managed servers.** `internal/credentials` is the only boundary
+  that decrypts stored material (AES-256-GCM via `internal/crypto`); it seals a
+  password/private-key/passphrase payload and unwraps it late, closing it after
+  use. `internal/provider` defines the primitive execution-provider interface,
+  a reuse pool keyed by server id, and the safe error taxonomy.
+  `internal/server` implements server CRUD with optimistic locking, tag
+  handling, credential storage/rotation (which invalidates pooled connections),
+  connection testing with system-info discovery, and explicit, audited
+  host-key trust. Object-level authorization is enforced in the service:
+  a server the actor cannot see is reported as 404, not 403. HTTP:
+  `/api/v1/servers` and its `{id}` sub-resources (`test`, `hostkeys`,
+  `hostkeys/trust`).
 
 ### Security
 
