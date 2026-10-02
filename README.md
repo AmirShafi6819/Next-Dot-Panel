@@ -14,34 +14,91 @@ processes, users, roles and audit history — behind one authenticated web UI.
 SQLite works out of the box with no external services; PostgreSQL is
 supported for larger deployments.
 
+**[Quick start](#quick-start) · [Documentation](docs/) · [Security](SECURITY.md) ·
+[Support](SUPPORT.md) · [Contributing](CONTRIBUTING.md) · [Roadmap](ROADMAP.md) ·
+[Changelog](CHANGELOG.md)**
+
 > **Beta.** This is the first public Beta baseline (`v0.1.0`): the panel is
 > functional and tested, but it is still evolving. APIs and the UI may change,
 > and some planned features are not implemented yet — see
 > [Beta status](#beta-status) and [ROADMAP.md](ROADMAP.md). Evaluate carefully
 > before trusting it with production infrastructure.
 
+## Why Next.Panel?
+
+Managing a few Linux servers usually means a terminal multiplexer, scattered
+SSH keys, ad-hoc scripts, and no shared view of who did what. Next.Panel
+puts the everyday operations — shell access, files, resource graphs,
+processes, and user permissions — behind one login, while keeping the
+footprint small: a single Go binary, an embedded web UI, and SQLite by
+default. No agent to install on managed machines — if a server speaks SSH,
+Next.Panel can manage it.
+
+## Who is it for?
+
+- **VPS owners and self-hosters** running one or a handful of Linux boxes
+- **Homelab users** who want a browser UI over their machines without a
+  heavyweight platform
+- **Developers** who need to give collaborators scoped server access with an
+  audit trail instead of sharing SSH keys
+- **Small infrastructure teams** that need roles, per-server permissions,
+  and a record of administrative actions
+
+## What Next.Panel is not
+
+- Not a cloud control plane: there is no hosted service, and the panel runs
+  on infrastructure you control.
+- Not an agent-based fleet manager: managed servers need only SSH, but that
+  also means no offline queuing or push-based orchestration.
+- Not a monitoring suite: metrics cover CPU, memory, disk and processes for
+  operational awareness, not alerting pipelines (see [ROADMAP.md](ROADMAP.md)).
+- Not finished: this is a Beta — check [Beta status](#beta-status) before
+  committing to it.
+
+## Where Next.Panel fits
+
+Next.Panel belongs to the self-hosted server-panel category: a web UI for
+day-to-day administration of your own Linux machines. Within that category it
+leans toward the lightweight end — one process, SSH-native access, RBAC and
+auditing built in from the start rather than bolted on. If you need
+container orchestration, configuration management, or a managed SaaS
+dashboard, use a tool built for that; Next.Panel deliberately does not try to
+be one.
+
+## Screenshots
+
+> Screenshots of the Beta UI will be added here. Placeholders below mark the
+> views that will be captured — no mockups, only real UI once available.
+
+### Servers
+
+*Screenshot: server list with connection status — coming soon.*
+
+### Web Terminal
+
+*Screenshot: browser terminal session — coming soon.*
+
+### File Manager
+
+*Screenshot: remote file browser — coming soon.*
+
+### Monitoring
+
+*Screenshot: metrics history charts — coming soon.*
+
+## Demo
+
+> A public demo is not currently available.
+
+The fastest way to evaluate Next.Panel is to run it locally — see
+[Quickest local evaluation](#quickest-local-evaluation). A future demo GIF or
+video walkthrough will be linked from this section when one exists.
+
 ## Features
 
 Everything below is implemented and covered by automated tests on SQLite and
-PostgreSQL.
-
-### Authentication & security
-
-- Argon2id password hashing with a breached/common-password blocklist and a
-  minimum-length policy
-- Opaque server-side sessions (absolute + idle expiry, revocation, login
-  history per user)
-- Bootstrap administrator with a default-credential warning until the
-  password is changed
-- RBAC: permission catalogue, `admin` / `operator` / `viewer` system roles,
-  custom roles, per-server grants; invisible objects return 404, denials are
-  audited
-- Login rate limiting with progressive lockout, security headers, same-site
-  cookies
-- SSH host keys fail closed: unknown keys are refused with a fingerprint for
-  explicit trust; changed keys hard-stop the connection — no auto-accept path
-- Stored server credentials are AES-256-GCM ciphertext; the key comes from
-  the environment, never the database
+PostgreSQL. Planned but unimplemented work is listed separately in
+[ROADMAP.md](ROADMAP.md), never here.
 
 ### Server management
 
@@ -71,7 +128,29 @@ PostgreSQL.
 - Remote process list with search and audited SIGTERM / SIGKILL
 - Live server state over server-sent events
 
-### Administration
+### Authentication & RBAC
+
+- Argon2id password hashing with a breached/common-password blocklist and a
+  minimum-length policy
+- Opaque server-side sessions (absolute + idle expiry, revocation, login
+  history per user)
+- Bootstrap administrator with a default-credential warning until the
+  password is changed
+- Permission catalogue, `admin` / `operator` / `viewer` system roles, custom
+  roles, per-server grants; invisible objects return 404, denials are
+  audited
+
+### Security
+
+- SSH host keys fail closed: unknown keys are refused with a fingerprint for
+  explicit trust; changed keys hard-stop the connection — no auto-accept path
+- Stored server credentials are AES-256-GCM ciphertext; the key comes from
+  the environment, never the database
+- Login rate limiting with progressive lockout, security headers, same-site
+  cookies; privileged subsystems (local execution, containers, services) are
+  all disabled by default
+
+### Audit & administration
 
 - User CRUD with disable/delete guards (last admin and self are protected),
   password reset, session revocation
@@ -129,6 +208,8 @@ No CGO, no external daemons, no message queue.
 
 ## Quick start
 
+### Quickest local evaluation
+
 The fastest way is the launcher script for your OS — it checks dependencies,
 builds the frontend (if Node is available) and backend, sets up a local
 `.env`, and starts the panel:
@@ -136,7 +217,10 @@ builds the frontend (if Node is available) and backend, sets up a local
 - Windows: `run.bat` (or `run.ps1`)
 - Linux / macOS: `./run.sh`
 
-Or manually:
+Then open the URL it prints (default <http://localhost:8080>) and sign in.
+To evaluate manually instead, follow the steps below.
+
+### Manual setup
 
 ```sh
 git clone https://github.com/AmirShafi6819/Next-Dot-Panel.git
@@ -173,6 +257,12 @@ curl -s localhost:8080/health    # {"status":"ok"}
 curl -s localhost:8080/ready     # {"status":"ready"}
 curl -s localhost:8080/version   # build metadata
 ```
+
+### Production deployment
+
+For anything beyond local evaluation — systemd, reverse proxy with TLS,
+PostgreSQL, backups — follow [Production deployment](#production-deployment)
+and the full guide in [`docs/deployment.md`](docs/deployment.md).
 
 ## Configuration
 
