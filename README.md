@@ -1,8 +1,24 @@
 # Next.Panel
 
+<p align="center">
+  <img src="./docs/assets/next-dot-panel.png" alt="Next.Panel" width="100%">
+</p>
+
+
 [![CI](https://github.com/AmirShafi6819/Next-Dot-Panel/actions/workflows/ci.yml/badge.svg)](https://github.com/AmirShafi6819/Next-Dot-Panel/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 ![Status: beta](https://img.shields.io/badge/status-beta-yellow.svg)
+![Status](https://img.shields.io/badge/status-beta-yellow.svg)
+![Go](https://img.shields.io/badge/Go-1.24-00ADD8?logo=go&logoColor=white)
+![TypeScript](https://img.shields.io/badge/TypeScript-5.x-3178C6?logo=typescript&logoColor=white)
+![React](https://img.shields.io/badge/React-19-61DAFB?logo=react&logoColor=black)
+![Node.js](https://img.shields.io/badge/Node.js-24-339933?logo=node.js&logoColor=white)
+![License](https://img.shields.io/github/license/AmirShafi6819/Next-Dot-Panel)
+![GitHub Stars](https://img.shields.io/github/stars/AmirShafi6819/Next-Dot-Panel)
+![GitHub Forks](https://img.shields.io/github/forks/AmirShafi6819/Next-Dot-Panel)
+![GitHub Issues](https://img.shields.io/github/issues/AmirShafi6819/Next-Dot-Panel)
+![GitHub Last Commit](https://img.shields.io/github/last-commit/AmirShafi6819/Next-Dot-Panel)
+
 
 > A self-hosted server management panel for remote Linux machines over SSH —
 > with an integrated web terminal, file management, metrics, process
