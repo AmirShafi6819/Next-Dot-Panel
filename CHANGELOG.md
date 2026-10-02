@@ -70,6 +70,16 @@ entries are invented.
   a server the actor cannot see is reported as 404, not 403. HTTP:
   `/api/v1/servers` and its `{id}` sub-resources (`test`, `hostkeys`,
   `hostkeys/trust`).
+- **Phase 6 — SSH.** `internal/provider/ssh` implements the SSH execution
+  provider on `golang.org/x/crypto/ssh`: host-key verification that fails
+  closed (unknown keys are refused with a SHA256 fingerprint for an explicit
+  trust step; changed keys are a hard stop with no auto-accept), modern
+  algorithm allow-lists, key and password auth, command execution with a
+  timeout and bounded stdout/stderr captured in independent buffers, exit
+  status as a result rather than an error, and context cancellation. Commands
+  are sent with POSIX single-quote escaping, never interpolated raw. The
+  provider is registered with the execution registry at startup, and connection
+  testing now connects over SSH for real.
 
 ### Security
 

@@ -216,9 +216,9 @@ CHANGELOG entry and a commit.
 | 1 | Config, logging, startup checks, `/health` `/ready` `/version` | ✅ |
 | 2 | Store layer: migrations, sqlc dual-dialect, adapters, repositories | ✅ |
 | 3 | Auth: Argon2id, sessions, login/logout, bootstrap admin | ✅ |
-| 4 | RBAC: permissions, roles, object-level authorisation | ⏳ |
-| 5 | Servers: CRUD, tags, status, connection test | ⏳ |
-| 6 | SSH provider: connection, host-key policy, pooling | ⏳ |
+| 4 | RBAC: permissions, roles, object-level authorisation | ✅ |
+| 5 | Servers: CRUD, tags, status, connection test | ✅ |
+| 6 | SSH provider: connection, host-key policy, pooling | ✅ |
 | 7–13 | Exec, dashboard, terminal, files, transfer, archive, metrics | ⏳ |
 | 14–21 | Historical metrics, processes, systemd, containers, jobs, audit, tokens, backups | ⏳ |
 | 22–25 | Security hardening, UI, embedded frontend build, Docker/systemd | ⏳ |

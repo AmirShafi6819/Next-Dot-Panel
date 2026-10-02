@@ -130,6 +130,7 @@ func serve(ctx context.Context, stdout, stderr io.Writer) int {
 	credStore := credentials.New(queries, encryptor)
 	registry := provider.NewRegistry(log)
 	defer registry.Close(context.Background())
+	registerProviders(registry, queries, cfg)
 
 	serverSvc := server.New(queries, credStore, rbacSvc, registry, auditWriter, log, server.Options{
 		LocalExecutionEnabled: cfg.Features.LocalExecutionEnabled,
