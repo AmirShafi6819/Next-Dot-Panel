@@ -16,6 +16,7 @@ type UserDetail struct {
 	LastLoginAt        *time.Time `json:"last_login_at,omitempty"`
 	CreatedAt          time.Time  `json:"created_at"`
 	UpdatedAt          time.Time  `json:"updated_at"`
+	Version            int64      `json:"version"`
 	Roles              []Role     `json:"roles"`
 }
 
@@ -28,7 +29,7 @@ func FromUserDetail(u domain.User) UserDetail {
 	return UserDetail{
 		ID: int64(u.ID), Username: u.Username, DisplayName: u.DisplayName,
 		IsActive: u.IsActive, MustChangePassword: u.MustChangePassword,
-		LastLoginAt: u.LastLoginAt, CreatedAt: u.CreatedAt, UpdatedAt: u.UpdatedAt, Roles: roles,
+		LastLoginAt: u.LastLoginAt, CreatedAt: u.CreatedAt, UpdatedAt: u.UpdatedAt, Version: u.Version, Roles: roles,
 	}
 }
 

@@ -20,9 +20,10 @@ func SecurityHeaders(externalScheme string) func(http.Handler) http.Handler {
 			h.Set("Referrer-Policy", "no-referrer")
 			h.Set("Permissions-Policy", "camera=(), microphone=(), geolocation=()")
 			h.Set("X-Frame-Options", "DENY")
-			// The API serves JSON only; a strict policy is safe until the
-			// embedded frontend arrives, when this is revisited for its paths.
-			h.Set("Content-Security-Policy", "default-src 'none'; frame-ancestors 'deny'; base-uri 'none'")
+			// The UI and API are same-origin. Scripts, styles and workers load
+			// from 'self'; the terminal and metrics use same-origin HTTP and
+			// WebSockets. Nothing else is allowed to load or frame the app.
+			h.Set("Content-Security-Policy", "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self' ws: wss:; font-src 'self'; object-src 'none'; base-uri 'self'; frame-ancestors 'deny'")
 			if hsts {
 				h.Set("Strict-Transport-Security", "max-age=63072000; includeSubDomains")
 			}

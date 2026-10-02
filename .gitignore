@@ -23,6 +23,12 @@ coverage.out
 coverage.html
 *.prof
 
+# Frontend build output and dependencies (the built UI is produced by
+# `npm run build` in web/; only the placeholder is committed)
+web/dist/*
+!web/dist/.gitkeep
+web/node_modules/
+
 # Editor and OS files
 .vscode/
 .idea/

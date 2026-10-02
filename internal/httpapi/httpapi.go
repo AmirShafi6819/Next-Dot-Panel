@@ -5,7 +5,10 @@ package httpapi
 import (
 	"context"
 	"fmt"
+	"mime"
 	"net/http"
+	"path"
+	"strings"
 	"time"
 
 	"github.com/go-chi/chi/v5"
@@ -26,6 +29,7 @@ import (
 	"github.com/ashaibery/Next-Dot-Panel/internal/store"
 	"github.com/ashaibery/Next-Dot-Panel/internal/terminal"
 	"github.com/ashaibery/Next-Dot-Panel/internal/users"
+	frontend "github.com/ashaibery/Next-Dot-Panel/web"
 )
 
 // Deps are the wiring inputs for the router.
@@ -126,7 +130,42 @@ func New(deps Deps) http.Handler {
 	r.MethodNotAllowed(func(w http.ResponseWriter, req *http.Request) {
 		dto.WriteError(w, req, http.StatusMethodNotAllowed, "method_not_allowed", "That method is not supported for this endpoint.", nil)
 	})
+
+	// The embedded single-page application, served for browser navigation.
+	// API clients keep the JSON envelope (see serveUI).
+	r.Get("/*", serveUI)
 	return r
+}
+
+// serveUI serves the embedded frontend with an SPA fallback. Requests that
+// accept HTML (browsers) receive index.html for unknown paths; API clients
+// keep the standard error envelope so automated clients never parse HTML.
+func serveUI(w http.ResponseWriter, req *http.Request) {
+	p := strings.TrimPrefix(path.Clean("/"+strings.TrimPrefix(req.URL.Path, "/")), "/")
+	if strings.HasPrefix(p, "api/") || p == "health" || p == "ready" || p == "version" {
+		dto.WriteError(w, req, http.StatusNotFound, "not_found", "The requested endpoint does not exist.", nil)
+		return
+	}
+	if p == "" {
+		p = "index.html"
+	}
+	if data, err := frontend.Dist.ReadFile("dist/" + p); err == nil {
+		if ct := mime.TypeByExtension(path.Ext(p)); ct != "" {
+			w.Header().Set("Content-Type", ct)
+		}
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write(data) // #nosec G705 -- data is the panel's own built frontend, not user input.
+		return
+	}
+	if strings.Contains(req.Header.Get("Accept"), "text/html") {
+		if index, err := frontend.Dist.ReadFile("dist/index.html"); err == nil {
+			w.Header().Set("Content-Type", "text/html; charset=utf-8")
+			w.WriteHeader(http.StatusOK)
+			_, _ = w.Write(index)
+			return
+		}
+	}
+	dto.WriteError(w, req, http.StatusNotFound, "not_found", "The requested endpoint does not exist.", nil)
 }
 
 // registerAuthRoutes mounts the authentication and session endpoints under
