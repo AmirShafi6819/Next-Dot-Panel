@@ -64,6 +64,16 @@ jobs:
       - uses: actions/setup-go@v5
         with:
           go-version: ${{ matrix.go-version }}
+      # The Go binary embeds web/dist, so the frontend must be built first —
+      # otherwise CI would test an API-only binary.
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+      - name: Build frontend
+        run: npm ci --no-audit --no-fund && npm run build
+        working-directory: web
       - name: Build
         run: go build ./...
       - name: Unit and SQLite integration tests
@@ -94,6 +104,15 @@ jobs:
       - uses: actions/setup-go@v5
         with:
           go-version: stable
+      # Same ordering reason as the test job: embed the real UI before building.
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+      - name: Build frontend
+        run: npm ci --no-audit --no-fund && npm run build
+        working-directory: web
       - name: Tests with PostgreSQL
         run: go test ./... -count=1 -race -timeout=15m
 

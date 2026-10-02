@@ -17,6 +17,14 @@
 *.ts   text eol=lf
 *.tsx  text eol=lf
 
+# Shell launchers stay LF everywhere.
+*.sh   text eol=lf
+*.ps1  text eol=lf
+
+# cmd.exe parses CRLF batch files reliably; LF works on modern Windows but
+# CRLF is the safe convention.
+*.bat  text eol=crlf
+
 # Genuinely binary files.
 *.png  binary
 *.jpg  binary
