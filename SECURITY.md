@@ -11,9 +11,8 @@
 
 **Do not open a public GitHub issue for a suspected vulnerability.**
 
-Email the maintainer privately. Until a dedicated security contact is
-published, use a private GitHub Security Advisory on this repository
-(Security → Advisories → New draft advisory). Include:
+Use a private GitHub Security Advisory on this repository (Security →
+Advisories → New draft advisory). Include:
 
 - Next.Panel version and deployment method (binary, Docker, systemd)
 - Linux distribution of the panel host and of any affected remote server

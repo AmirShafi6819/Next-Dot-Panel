@@ -10,10 +10,12 @@ entries are invented.
 
 ## [Unreleased]
 
-## [0.1.0] — 2026-10-02
+## [0.1.0] — 2026-10-02 — first public Beta baseline
 
-First functional release. Everything below is implemented, integrated, tested
-on SQLite and PostgreSQL, and served by the binary with the embedded UI.
+First functional release, published as a public Beta. Everything below is
+implemented, integrated, tested on SQLite and PostgreSQL, and served by the
+binary with the embedded UI. Only shipped functionality is listed; future
+work lives in ROADMAP.md.
 
 ### Added
 

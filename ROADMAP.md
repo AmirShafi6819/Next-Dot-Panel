@@ -1,11 +1,13 @@
 # Roadmap
 
-0.1.0 is the first functional release: multi-server SSH management, terminal,
-file manager, metrics, processes, users/RBAC, audit and a React UI.
+**Current Beta — `v0.1.0`.** This is the first public Beta baseline:
+multi-server SSH management, terminal, file manager, metrics, processes,
+users/RBAC, audit and a React UI. Functional and tested, but still evolving —
+APIs and UI may change between Beta releases.
 
 Only items below marked as shipped exist. Everything else is planned, not promised.
 
-## Shipped in 0.1.0
+## Shipped in the Beta (0.1.0)
 
 - Local auth (Argon2id), sessions, bootstrap admin with default-credential warning
 - RBAC with per-server grants, role administration UI + API
