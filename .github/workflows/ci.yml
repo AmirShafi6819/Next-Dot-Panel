@@ -1,0 +1,121 @@
+# Continuous integration.
+#
+# Gates present from Phase 0 (Design Spec §38): format check, `go vet`,
+# golangci-lint, unit tests, PostgreSQL integration tests, sqlc drift check
+# and the §28.6 security greps. Later phases add frontend lint/typecheck/build,
+# Playwright E2E, the vulnerability scan, Docker build and smoke test
+# (§30.8 gates that need artefacts that do not exist yet).
+
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  quality:
+    name: Format, vet, lint, security greps
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: stable
+      - name: gofmt
+        run: |
+          unformatted=$(gofmt -l .)
+          if [ -n "$unformatted" ]; then
+            echo "gofmt reported unformatted files:"
+            echo "$unformatted"
+            exit 1
+          fi
+      - name: go vet
+        run: go vet ./...
+      - name: go mod verify
+        run: go mod verify
+      - name: golangci-lint
+        uses: golangci/golangci-lint-action@v9
+        with:
+          version: v2.14.0
+      - name: Security greps (§28.6)
+        run: bash scripts/security-greps.sh
+
+  test:
+    name: Test (Go ${{ matrix.go-version }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        # The floor declared in go.mod and the toolchain the project is
+        # developed with; design spec open question 1 expects CI to confirm
+        # which versions build and test cleanly.
+        go-version: ["1.26.x", "1.27.x"]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: ${{ matrix.go-version }}
+      - name: Build
+        run: go build ./...
+      - name: Unit and SQLite integration tests
+        run: go test ./... -count=1 -race -timeout=10m
+
+  postgres:
+    name: Integration tests (PostgreSQL 16)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: nextpanel_test
+          POSTGRES_PASSWORD: nextpanel_test
+          POSTGRES_DB: nextpanel_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U nextpanel_test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 12
+    env:
+      TEST_DATABASE_URL: postgres://nextpanel_test:nextpanel_test@127.0.0.1:5432/nextpanel_test?sslmode=disable
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: stable
+      - name: Tests with PostgreSQL
+        run: go test ./... -count=1 -race -timeout=15m
+
+  sqlc:
+    name: Generated code in sync
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: stable
+      - name: Install sqlc
+        run: |
+          curl -sSL -o /tmp/sqlc.tar.gz \
+            https://github.com/sqlc-dev/sqlc/releases/download/v1.30.0/sqlc_1.30.0_linux_amd64.tar.gz
+          tar -xzf /tmp/sqlc.tar.gz -C /tmp sqlc
+          sudo install -m 0755 /tmp/sqlc /usr/local/bin/sqlc
+      - name: sqlc version
+        run: sqlc version
+      - name: sqlc generate must leave a clean tree
+        run: |
+          sqlc generate
+          git diff --exit-code
