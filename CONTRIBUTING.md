@@ -1,5 +1,15 @@
 # Contributing to Next.Panel
 
+## Finding something to work on
+
+- Issues labelled `good first issue` are small, well-scoped entry points;
+  `help wanted` marks work maintainers would like assistance with;
+  `documentation`, `frontend`, `backend` and `security` describe the area.
+- If no labelled issue fits, small improvements with tests (typo fixes,
+  missing test coverage, docs gaps) are welcome without prior discussion.
+- For anything larger — new endpoints, new UI areas, behaviour changes —
+  open an issue first so the design can be agreed before code is written.
+
 ## Development setup
 
 Prerequisites: Go 1.26+, Node 20+, SQLite (via the wasm driver — no CGO),
@@ -36,7 +46,17 @@ Copy `.env.example` to `.env` for local settings (never commit `.env`).
 - `cd web && npm run build` passes (typecheck + production build).
 - New behavior has tests, including negative/authorization tests where
   applicable.
-- Docs and CHANGELOG.md are updated.
+- Docs and CHANGELOG.md are updated for user-visible changes.
+
+## Pull request size and review
+
+- Keep PRs small and reviewable: one change per PR, ideally under ~400 lines
+  of diff excluding generated code. Split refactors from behaviour changes.
+- Use Conventional Commit titles (`feat(auth): …`, `fix(files): …`); the PR
+  template lists the verification checklist — fill it in.
+- Maintainers review for correctness, security, test coverage and docs; expect
+  at least one round of feedback on non-trivial changes. `main` merges are
+  squash or rebase, keeping history linear.
 
 ## Security-sensitive changes
 
