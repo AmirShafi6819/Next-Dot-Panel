@@ -363,6 +363,22 @@ func TestExecOutputTruncation(t *testing.T) {
 	}
 }
 
+func TestMapNetworkErrorCodes(t *testing.T) {
+	cases := []struct {
+		msg  string
+		want provider.ErrorCode
+	}{
+		{"dial tcp 127.0.0.1:22: connectex: No connection could be made because the target machine actively refused it.", provider.CodeNetworkUnreachable},
+		{"dial tcp: lookup nope.invalid: no such host", provider.CodeDNS},
+		{"i/o timeout", provider.CodeTimeout},
+	}
+	for _, tc := range cases {
+		if got := provider.CodeOf(mapNetworkError("dial", errors.New(tc.msg))); got != tc.want {
+			t.Errorf("mapNetworkError(%q) = %s, want %s", tc.msg, got, tc.want)
+		}
+	}
+}
+
 func echoHandler(cmd string) (string, string, int, time.Duration) {
 	switch {
 	case strings.HasPrefix(cmd, "echo"):

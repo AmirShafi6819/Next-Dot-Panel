@@ -396,7 +396,7 @@ func mapNetworkError(op string, err error) error {
 	}
 	msg := strings.ToLower(err.Error())
 	switch {
-	case strings.Contains(msg, "connection refused"):
+	case strings.Contains(msg, "connection refused"), strings.Contains(msg, "refused"):
 		return provider.NewError(provider.CodeNetworkUnreachable, op, err)
 	case strings.Contains(msg, "no such host"):
 		return provider.NewError(provider.CodeDNS, op, err)
