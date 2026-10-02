@@ -26,6 +26,7 @@ import (
 	"github.com/ashaibery/Next-Dot-Panel/internal/crypto"
 	"github.com/ashaibery/Next-Dot-Panel/internal/files"
 	"github.com/ashaibery/Next-Dot-Panel/internal/httpapi"
+	"github.com/ashaibery/Next-Dot-Panel/internal/jobs"
 	"github.com/ashaibery/Next-Dot-Panel/internal/logging"
 	"github.com/ashaibery/Next-Dot-Panel/internal/metrics"
 	"github.com/ashaibery/Next-Dot-Panel/internal/processes"
@@ -166,6 +167,13 @@ func serve(ctx context.Context, stdout, stderr io.Writer) int {
 	metricsSched.Start(ctx)
 	defer metricsSched.Stop()
 	processesSvc := processes.New(serverSvc, auditWriter, log)
+
+	jobPool := jobs.New(queries, cfg.Features.WorkerCount, log)
+	registerJobHandlers(ctx, jobPool, queries, terminalSvc, cfg.Features.MetricRetentionRaw, cfg.Features.AuditRetention, cfg.Security.SessionLifetime)
+	if cfg.Features.WorkersEnabled {
+		jobPool.Start(ctx)
+		defer jobPool.Stop()
+	}
 
 	// Binding before serving makes an occupied port a startup failure with a
 	// clear message instead of a crash loop.

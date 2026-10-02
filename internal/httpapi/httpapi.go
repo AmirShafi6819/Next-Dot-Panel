@@ -79,6 +79,11 @@ func New(deps Deps) http.Handler {
 	r.Use(middleware.RequestID)
 	r.Use(middleware.AccessLog(deps.Log))
 	r.Use(middleware.Recover(deps.Log))
+	scheme := "http"
+	if deps.Config != nil {
+		scheme = deps.Config.App.ExternalScheme
+	}
+	r.Use(middleware.SecurityHeaders(scheme))
 
 	health := handlers.Health{}
 	version := handlers.Version{}
@@ -136,7 +141,7 @@ func registerAuthRoutes(r chi.Router, deps Deps) {
 	}
 	r.Route("/api/v1/auth", func(rt chi.Router) {
 		rt.Use(middleware.Session(deps.Auth))
-		rt.Post("/login", h.Login)
+		rt.Post("/login", rateLimitedLogin(deps, h))
 
 		rt.Group(func(rt chi.Router) {
 			rt.Use(middleware.RequireAuth)
@@ -148,6 +153,18 @@ func registerAuthRoutes(r chi.Router, deps Deps) {
 			rt.Delete("/sessions/{id}", h.RevokeSession)
 		})
 	})
+}
+
+// rateLimitedLogin wraps the login handler with a fixed-window limiter so
+// brute-force password guessing is throttled per client address. The limit
+// comes from configuration; a non-positive value disables it.
+func rateLimitedLogin(deps Deps, h *handlers.Auth) http.HandlerFunc {
+	login := http.HandlerFunc(h.Login)
+	if deps.Config == nil || deps.Config.Security.RateLimitAuth <= 0 {
+		return login.ServeHTTP
+	}
+	limiter := middleware.NewRateLimiter(deps.Config.Security.RateLimitAuth, deps.Config.Security.RateLimitAuthWnd)
+	return middleware.Limit(limiter, middleware.ClientIPKey)(login).ServeHTTP
 }
 
 // registerRBACRoutes mounts role and permission administration under
@@ -269,6 +286,10 @@ func registerOpsRoutes(r chi.Router, deps Deps) {
 			ph := &handlers.Processes{Service: deps.Processes, Log: deps.Log}
 			rt.Get("/api/v1/servers/{id}/processes", ph.List)
 			rt.Post("/api/v1/servers/{id}/processes/{pid}/signal", ph.Signal)
+		}
+		if deps.Metrics != nil && deps.Servers != nil {
+			eh := &handlers.Events{Metrics: deps.Metrics, Servers: deps.Servers, Log: deps.Log}
+			rt.Get("/api/v1/servers/{id}/events", eh.ServeHTTP)
 		}
 	})
 }
