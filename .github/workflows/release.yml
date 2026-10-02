@@ -1,0 +1,108 @@
+# Release builds.
+#
+# Runs when a version tag (vX.Y.Z) is pushed. Builds the existing application
+# — frontend first so the binary embeds the UI, then the Go binary per
+# platform — and attaches the archives plus SHA256 checksums to the GitHub
+# Release. No Docker images are published (there is no publishing strategy).
+#
+# Platforms mirror documented usage: Linux is the deployment target, and the
+# launch scripts support local runs on Windows and macOS.
+
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*.*.*"
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    name: Build ${{ matrix.goos }}/${{ matrix.goarch }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - goos: linux
+            goarch: amd64
+          - goos: linux
+            goarch: arm64
+          - goos: windows
+            goarch: amd64
+          - goos: darwin
+            goarch: amd64
+          - goos: darwin
+            goarch: arm64
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+      - uses: actions/setup-go@v5
+        with:
+          go-version: stable
+      - name: Build frontend (embedded into the binary)
+        run: npm ci --no-audit --no-fund && npm run build
+        working-directory: web
+      - name: Build backend
+        env:
+          CGO_ENABLED: "0"
+          GOOS: ${{ matrix.goos }}
+          GOARCH: ${{ matrix.goarch }}
+        run: |
+          version="${GITHUB_REF_NAME#v}"
+          ext=""
+          [ "$GOOS" = "windows" ] && ext=".exe"
+          go build -trimpath \
+            -ldflags "-X github.com/ashaibery/Next-Dot-Panel/internal/version.Version=${version} -X github.com/ashaibery/Next-Dot-Panel/internal/version.Commit=${GITHUB_SHA} -X github.com/ashaibery/Next-Dot-Panel/internal/version.BuildDate=$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+            -o "nextpanel-${GOOS}-${GOARCH}${ext}" ./cmd/nextpanel
+      - name: Package
+        run: |
+          os="${{ matrix.goos }}"
+          arch="${{ matrix.goarch }}"
+          dir="nextpanel-${os}-${arch}"
+          mkdir "$dir"
+          src="nextpanel-${os}-${arch}"
+          dst="nextpanel"
+          if [ "$os" = "windows" ]; then src="${src}.exe"; dst="${dst}.exe"; fi
+          cp "$src" "$dir/$dst"
+          cp .env.example LICENSE README.md "$dir/"
+          if [ "$os" = "windows" ]; then
+            (cd "$dir" && zip -r "../${dir}.zip" .)
+          else
+            tar -czf "${dir}.tar.gz" "$dir"
+          fi
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: nextpanel-${{ matrix.goos }}-${{ matrix.goarch }}
+          path: |
+            nextpanel-*.tar.gz
+            nextpanel-*.zip
+          if-no-files-found: error
+
+  publish:
+    name: Publish GitHub Release
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    needs: build
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+          merge-multiple: true
+      - name: Checksums
+        run: (cd artifacts && sha256sum nextpanel-* > SHA256SUMS.txt)
+      - name: Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            artifacts/nextpanel-*
+            artifacts/SHA256SUMS.txt
+          generate_release_notes: true

@@ -1,0 +1,24 @@
+# Dependency update automation (GitHub Dependabot).
+#
+# Opens pull requests for outdated Go modules, npm packages and GitHub
+# Actions. Merging them is a maintainer decision — CI (tests on two Go
+# versions, PostgreSQL suite, lint, frontend build) must stay green.
+
+version: 2
+updates:
+  - package-ecosystem: gomod
+    directory: "/"
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 5
+
+  - package-ecosystem: npm
+    directory: "/web"
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 5
+
+  - package-ecosystem: github-actions
+    directory: "/"
+    schedule:
+      interval: weekly
