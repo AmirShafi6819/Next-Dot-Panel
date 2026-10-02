@@ -112,10 +112,14 @@ if you find one.**
 
 ### First login
 
-Not implemented yet (Phase 3). When it lands: the bootstrap administrator
-account is created on first start with a generated password that must be
-changed at first login, and the UI shows a warning until it is. There will be
-no default password baked into the source.
+On the first start, when the users table is empty, a bootstrap administrator is
+created from `NEXT_PANEL_BOOTSTRAP_USERNAME`/`NEXT_PANEL_BOOTSTRAP_PASSWORD`
+(defaults `admin` / `123456`, matching the master spec). That account is flagged
+`is_bootstrap_default` and the server logs a warning on every start until the
+password is changed; `/api/v1/auth/me` also reports
+`default_credentials_warning`. Change the password immediately (it must be at
+least 12 characters). Set `NEXT_PANEL_BOOTSTRAP_ADMIN=false` to skip seeding and
+create the first administrator another way.
 
 ## Configuration
 
@@ -211,7 +215,7 @@ CHANGELOG entry and a commit.
 | 0 | Repository bootstrap, CI, tooling | ✅ |
 | 1 | Config, logging, startup checks, `/health` `/ready` `/version` | ✅ |
 | 2 | Store layer: migrations, sqlc dual-dialect, adapters, repositories | ✅ |
-| 3 | Auth: Argon2id, sessions, login/logout, bootstrap admin | ⏳ |
+| 3 | Auth: Argon2id, sessions, login/logout, bootstrap admin | ✅ |
 | 4 | RBAC: permissions, roles, object-level authorisation | ⏳ |
 | 5 | Servers: CRUD, tags, status, connection test | ⏳ |
 | 6 | SSH provider: connection, host-key policy, pooling | ⏳ |

@@ -217,6 +217,10 @@ type Session struct {
 	ExpiresAt  time.Time
 	RevokedAt  *time.Time
 
+	// ReauthAt is the last fresh password confirmation for this session
+	// (Design Spec §13.3). Nil means the session has never re-authenticated.
+	ReauthAt *time.Time
+
 	// Username is populated by admin-facing list queries.
 	Username string
 }

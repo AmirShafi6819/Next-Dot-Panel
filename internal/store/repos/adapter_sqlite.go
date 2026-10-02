@@ -112,6 +112,12 @@ func (a *SQLiteQueries) RecordUserLogin(ctx context.Context, id domain.UserID) e
 	return a.q.RecordUserLogin(ctx, int64(id))
 }
 
+func (a *SQLiteQueries) UpdateUserPasswordHash(ctx context.Context, id domain.UserID, hash string) error {
+	return a.q.UpdateUserPasswordHash(ctx, lite.UpdateUserPasswordHashParams{
+		ID: int64(id), PasswordHash: hash,
+	})
+}
+
 func (a *SQLiteQueries) SoftDeleteUser(ctx context.Context, id domain.UserID) error {
 	return a.q.SoftDeleteUser(ctx, int64(id))
 }
@@ -275,6 +281,7 @@ func liteSession(s lite.Session) domain.Session {
 		LastSeenAt: s.LastSeenAt,
 		ExpiresAt:  s.ExpiresAt,
 		RevokedAt:  parseSQLiteTimePtrStr(s.RevokedAt),
+		ReauthAt:   parseSQLiteTimePtrStr(s.ReauthAt),
 	}
 }
 
@@ -319,6 +326,7 @@ func (a *SQLiteQueries) ListAllSessions(ctx context.Context, p PageParams) ([]do
 			ID: s.ID, UserID: domain.UserID(s.UserID), TokenHash: s.TokenHash,
 			IP: s.Ip, UserAgent: s.UserAgent, CreatedAt: s.CreatedAt,
 			LastSeenAt: s.LastSeenAt, ExpiresAt: s.ExpiresAt, RevokedAt: parseSQLiteTimePtrStr(s.RevokedAt),
+			ReauthAt: parseSQLiteTimePtrStr(s.ReauthAt),
 			Username: s.Username,
 		})
 	}
@@ -331,6 +339,10 @@ func (a *SQLiteQueries) CountActiveSessions(ctx context.Context) (int64, error) 
 
 func (a *SQLiteQueries) TouchSession(ctx context.Context, id string) error {
 	return a.q.TouchSession(ctx, id)
+}
+
+func (a *SQLiteQueries) SetSessionReauthAt(ctx context.Context, id string) error {
+	return a.q.SetSessionReauthAt(ctx, id)
 }
 
 func (a *SQLiteQueries) RevokeSession(ctx context.Context, id string) error {

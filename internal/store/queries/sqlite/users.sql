@@ -51,6 +51,12 @@ SET display_name = ?2,
 WHERE id = ?1 AND deleted_at IS NULL AND version = ?4
 RETURNING *;
 
+-- Transparent parameter upgrade on login: rewrites only the hash, so the
+-- bootstrap-default flag and the must-change flag are untouched (clearing the
+-- bootstrap flag is reserved for an actual password change).
+-- name: UpdateUserPasswordHash :exec
+UPDATE users SET password_hash = ?2, updated_at = strftime('%Y-%m-%dT%H:%M:%fZ','now') WHERE id = ?1;
+
 -- name: SetUserPassword :one
 UPDATE users
 SET password_hash        = ?2,

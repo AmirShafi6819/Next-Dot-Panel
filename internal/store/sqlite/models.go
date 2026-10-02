@@ -257,6 +257,7 @@ type Session struct {
 	LastSeenAt time.Time `json:"last_seen_at"`
 	ExpiresAt  time.Time `json:"expires_at"`
 	RevokedAt  *string   `json:"revoked_at"`
+	ReauthAt   *string   `json:"reauth_at"`
 }
 
 type Setting struct {

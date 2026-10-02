@@ -115,6 +115,12 @@ func (a *PostgresQueries) RecordUserLogin(ctx context.Context, id domain.UserID)
 	return a.q.RecordUserLogin(ctx, int64(id))
 }
 
+func (a *PostgresQueries) UpdateUserPasswordHash(ctx context.Context, id domain.UserID, hash string) error {
+	return a.q.UpdateUserPasswordHash(ctx, pg.UpdateUserPasswordHashParams{
+		ID: int64(id), PasswordHash: hash,
+	})
+}
+
 func (a *PostgresQueries) SoftDeleteUser(ctx context.Context, id domain.UserID) error {
 	return a.q.SoftDeleteUser(ctx, int64(id))
 }
@@ -278,6 +284,7 @@ func pgSession(s pg.Session) domain.Session {
 		LastSeenAt: s.LastSeenAt,
 		ExpiresAt:  s.ExpiresAt,
 		RevokedAt:  s.RevokedAt,
+		ReauthAt:   s.ReauthAt,
 	}
 }
 
@@ -322,6 +329,7 @@ func (a *PostgresQueries) ListAllSessions(ctx context.Context, p PageParams) ([]
 			ID: s.ID, UserID: domain.UserID(s.UserID), TokenHash: s.TokenHash,
 			IP: s.Ip, UserAgent: s.UserAgent, CreatedAt: s.CreatedAt,
 			LastSeenAt: s.LastSeenAt, ExpiresAt: s.ExpiresAt, RevokedAt: s.RevokedAt,
+			ReauthAt: s.ReauthAt,
 			Username: s.Username,
 		})
 	}
@@ -334,6 +342,10 @@ func (a *PostgresQueries) CountActiveSessions(ctx context.Context) (int64, error
 
 func (a *PostgresQueries) TouchSession(ctx context.Context, id string) error {
 	return a.q.TouchSession(ctx, id)
+}
+
+func (a *PostgresQueries) SetSessionReauthAt(ctx context.Context, id string) error {
+	return a.q.SetSessionReauthAt(ctx, id)
 }
 
 func (a *PostgresQueries) RevokeSession(ctx context.Context, id string) error {

@@ -36,6 +36,7 @@ type Queries interface {
 	CountUsers(ctx context.Context, p CountUsersParams) (int64, error)
 	UpdateUser(ctx context.Context, p UpdateUserParams) (domain.User, error)
 	SetUserPassword(ctx context.Context, p SetUserPasswordParams) (domain.User, error)
+	UpdateUserPasswordHash(ctx context.Context, id domain.UserID, hash string) error
 	RecordUserLogin(ctx context.Context, id domain.UserID) error
 	SoftDeleteUser(ctx context.Context, id domain.UserID) error
 
@@ -71,6 +72,7 @@ type Queries interface {
 	ListAllSessions(ctx context.Context, p PageParams) ([]domain.Session, error)
 	CountActiveSessions(ctx context.Context) (int64, error)
 	TouchSession(ctx context.Context, id string) error
+	SetSessionReauthAt(ctx context.Context, id string) error
 	RevokeSession(ctx context.Context, id string) error
 	RevokeUserSessions(ctx context.Context, userID domain.UserID) (int64, error)
 	RevokeUserSessionsExcept(ctx context.Context, userID domain.UserID, keep string) (int64, error)

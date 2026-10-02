@@ -19,10 +19,12 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/ashaibery/Next-Dot-Panel/internal/auth"
 	"github.com/ashaibery/Next-Dot-Panel/internal/config"
 	"github.com/ashaibery/Next-Dot-Panel/internal/httpapi"
 	"github.com/ashaibery/Next-Dot-Panel/internal/logging"
 	"github.com/ashaibery/Next-Dot-Panel/internal/store"
+	"github.com/ashaibery/Next-Dot-Panel/internal/store/repos"
 	"github.com/ashaibery/Next-Dot-Panel/internal/version"
 )
 
@@ -85,6 +87,24 @@ func serve(ctx context.Context, stdout, stderr io.Writer) int {
 		return 1
 	}
 
+	queries, err := repos.NewQueries(db.Driver, db.DB, db.PGXPool())
+	if err != nil {
+		log.Error(ctx, "startup check failed", "check", "queries", "error", err)
+		return 1
+	}
+	authSvc := auth.New(queries, auth.Options{
+		SessionLifetime:   cfg.Security.SessionLifetime,
+		SessionIdle:       cfg.Security.SessionIdle,
+		ReauthWindow:      cfg.Security.ReauthWindow,
+		BootstrapEnabled:  cfg.Security.BootstrapAdminEnabled,
+		BootstrapUsername: cfg.Security.BootstrapUsername,
+		BootstrapPassword: cfg.Security.BootstrapPassword,
+	}, log)
+	if err := authSvc.Bootstrap(ctx); err != nil {
+		log.Error(ctx, "startup check failed", "check", "auth_bootstrap", "error", err)
+		return 1
+	}
+
 	// Binding before serving makes an occupied port a startup failure with a
 	// clear message instead of a crash loop.
 	ln, err := net.Listen("tcp", cfg.App.ListenAddr)
@@ -93,7 +113,7 @@ func serve(ctx context.Context, stdout, stderr io.Writer) int {
 		return 1
 	}
 
-	handler := httpapi.New(httpapi.Deps{Config: cfg, DB: db, Log: log})
+	handler := httpapi.New(httpapi.Deps{Config: cfg, DB: db, Log: log, Auth: authSvc})
 	srv := &http.Server{
 		Handler:           handler,
 		ReadHeaderTimeout: 10 * time.Second,

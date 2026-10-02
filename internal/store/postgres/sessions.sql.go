@@ -91,7 +91,7 @@ const createSession = `-- name: CreateSession :one
 
 INSERT INTO sessions (id, user_id, token_hash, ip, user_agent, expires_at)
 VALUES ($1, $2, $3, $4, $5, $6)
-RETURNING id, user_id, token_hash, ip, user_agent, created_at, last_seen_at, expires_at, revoked_at
+RETURNING id, user_id, token_hash, ip, user_agent, created_at, last_seen_at, expires_at, revoked_at, reauth_at
 `
 
 type CreateSessionParams struct {
@@ -124,6 +124,7 @@ func (q *Queries) CreateSession(ctx context.Context, arg CreateSessionParams) (S
 		&i.LastSeenAt,
 		&i.ExpiresAt,
 		&i.RevokedAt,
+		&i.ReauthAt,
 	)
 	return i, err
 }
@@ -153,7 +154,7 @@ func (q *Queries) DeleteLoginHistoryBefore(ctx context.Context, ts time.Time) (i
 }
 
 const getSessionByID = `-- name: GetSessionByID :one
-SELECT id, user_id, token_hash, ip, user_agent, created_at, last_seen_at, expires_at, revoked_at FROM sessions WHERE id = $1
+SELECT id, user_id, token_hash, ip, user_agent, created_at, last_seen_at, expires_at, revoked_at, reauth_at FROM sessions WHERE id = $1
 `
 
 func (q *Queries) GetSessionByID(ctx context.Context, id string) (Session, error) {
@@ -169,12 +170,13 @@ func (q *Queries) GetSessionByID(ctx context.Context, id string) (Session, error
 		&i.LastSeenAt,
 		&i.ExpiresAt,
 		&i.RevokedAt,
+		&i.ReauthAt,
 	)
 	return i, err
 }
 
 const getSessionByTokenHash = `-- name: GetSessionByTokenHash :one
-SELECT id, user_id, token_hash, ip, user_agent, created_at, last_seen_at, expires_at, revoked_at FROM sessions
+SELECT id, user_id, token_hash, ip, user_agent, created_at, last_seen_at, expires_at, revoked_at, reauth_at FROM sessions
 WHERE token_hash = $1 AND revoked_at IS NULL AND expires_at > now()
 `
 
@@ -193,6 +195,7 @@ func (q *Queries) GetSessionByTokenHash(ctx context.Context, tokenHash []byte) (
 		&i.LastSeenAt,
 		&i.ExpiresAt,
 		&i.RevokedAt,
+		&i.ReauthAt,
 	)
 	return i, err
 }
@@ -241,7 +244,7 @@ func (q *Queries) InsertLoginHistory(ctx context.Context, arg InsertLoginHistory
 }
 
 const listAllSessions = `-- name: ListAllSessions :many
-SELECT s.id, s.user_id, s.token_hash, s.ip, s.user_agent, s.created_at, s.last_seen_at, s.expires_at, s.revoked_at, u.username FROM sessions s
+SELECT s.id, s.user_id, s.token_hash, s.ip, s.user_agent, s.created_at, s.last_seen_at, s.expires_at, s.revoked_at, s.reauth_at, u.username FROM sessions s
 JOIN users u ON u.id = s.user_id
 WHERE s.revoked_at IS NULL AND s.expires_at > now()
 ORDER BY s.last_seen_at DESC
@@ -263,6 +266,7 @@ type ListAllSessionsRow struct {
 	LastSeenAt time.Time  `json:"last_seen_at"`
 	ExpiresAt  time.Time  `json:"expires_at"`
 	RevokedAt  *time.Time `json:"revoked_at"`
+	ReauthAt   *time.Time `json:"reauth_at"`
 	Username   string     `json:"username"`
 }
 
@@ -285,6 +289,7 @@ func (q *Queries) ListAllSessions(ctx context.Context, arg ListAllSessionsParams
 			&i.LastSeenAt,
 			&i.ExpiresAt,
 			&i.RevokedAt,
+			&i.ReauthAt,
 			&i.Username,
 		); err != nil {
 			return nil, err
@@ -357,7 +362,7 @@ func (q *Queries) ListLoginHistory(ctx context.Context, arg ListLoginHistoryPara
 }
 
 const listUserSessions = `-- name: ListUserSessions :many
-SELECT id, user_id, token_hash, ip, user_agent, created_at, last_seen_at, expires_at, revoked_at FROM sessions
+SELECT id, user_id, token_hash, ip, user_agent, created_at, last_seen_at, expires_at, revoked_at, reauth_at FROM sessions
 WHERE user_id = $1 AND revoked_at IS NULL AND expires_at > now()
 ORDER BY last_seen_at DESC
 `
@@ -381,6 +386,7 @@ func (q *Queries) ListUserSessions(ctx context.Context, userID int64) ([]Session
 			&i.LastSeenAt,
 			&i.ExpiresAt,
 			&i.RevokedAt,
+			&i.ReauthAt,
 		); err != nil {
 			return nil, err
 		}
@@ -431,6 +437,17 @@ func (q *Queries) RevokeUserSessionsExcept(ctx context.Context, arg RevokeUserSe
 		return 0, err
 	}
 	return result.RowsAffected(), nil
+}
+
+const setSessionReauthAt = `-- name: SetSessionReauthAt :exec
+UPDATE sessions SET reauth_at = now() WHERE id = $1
+`
+
+// Records a fresh password confirmation for the re-authentication window
+// (Design Spec section 13.3).
+func (q *Queries) SetSessionReauthAt(ctx context.Context, id string) error {
+	_, err := q.db.Exec(ctx, setSessionReauthAt, id)
+	return err
 }
 
 const touchSession = `-- name: TouchSession :exec

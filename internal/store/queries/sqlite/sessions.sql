@@ -32,6 +32,11 @@ SELECT count(*) FROM sessions WHERE revoked_at IS NULL AND expires_at > strftime
 -- name: TouchSession :exec
 UPDATE sessions SET last_seen_at = strftime('%Y-%m-%dT%H:%M:%fZ','now') WHERE id = ?1;
 
+-- Records a fresh password confirmation for the re-authentication window
+-- (Design Spec section 13.3).
+-- name: SetSessionReauthAt :exec
+UPDATE sessions SET reauth_at = strftime('%Y-%m-%dT%H:%M:%fZ','now') WHERE id = ?1;
+
 -- name: RevokeSession :exec
 UPDATE sessions SET revoked_at = strftime('%Y-%m-%dT%H:%M:%fZ','now') WHERE id = ?1 AND revoked_at IS NULL;
 

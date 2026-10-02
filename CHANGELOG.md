@@ -37,8 +37,29 @@ entries are invented.
   (structured logger with redaction), `internal/crypto` (AES-256-GCM
   credential encryption with key identifiers), `internal/secret` (secrets
   that never stringify), `internal/domain`, `internal/version`.
+- **Phase 3 — authentication.** `internal/auth`: Argon2id password hashing and
+  verification (OWASP-aligned parameters, transparent rehash-on-login), a
+  length-first password policy with a bundled common-password blocklist,
+  opaque server-side sessions (256-bit token, only its SHA-256 stored) with
+  absolute and idle expiry and throttled `last_seen_at` touches, constant-time
+  credential checks with a dummy verification for unknown users, login/logout,
+  re-authentication with a per-session window, self-service password change
+  that revokes every other session, IDOR-safe session listing/revocation, and
+  bootstrap seeding of an `admin` account flagged for an immediate password
+  change. HTTP surface under `/api/v1/auth` (`login`, `logout`, `password`,
+  `reauth`, `me`, `sessions`) with `HttpOnly` session and readable double-submit
+  CSRF cookies; a `sessions.reauth_at` migration on both dialects.
 
 ### Security
+
+- Authentication failures are indistinguishable: unknown user, wrong password,
+  and disabled account all return the same `invalid_credentials` error and the
+  same timing, and only a category (never a password) reaches login history.
+- The bootstrap administrator is flagged `is_bootstrap_default`; the panel
+  warns on every start and on `/me` while the default password stands, and the
+  warning clears only after a real password change.
+- Password changes and re-authentication are audited, and changing a password
+  revokes all of the account's other sessions.
 
 - Startup fails when `NEXT_PANEL_ENCRYPTION_KEY` is missing or malformed;
   the error names the variable and never echoes the value.
