@@ -25,7 +25,7 @@ fail=0
 check() {
   local label="$1" pattern="$2"
   local hits
-  hits=$(grep -rInE --exclude=security-greps.sh -i -e "$pattern" "${targets[@]}" || true)
+  hits=$(grep -rInE --exclude=security-greps.sh --exclude-dir=node_modules --exclude-dir=dist -i -e "$pattern" "${targets[@]}" || true)
   if [ -n "$hits" ]; then
     echo "::error::security grep failed: ${label}"
     printf '%s\n' "$hits"
@@ -37,9 +37,10 @@ check() {
 check "host key verification disabled" 'ssh\.InsecureIgnoreHostKey'
 
 # hardcoded credential literals: an exact password-ish identifier assigned a
-# string literal (PasswordHash: "…" and ActionPasswordChanged = "…" are not
-# credentials and do not match).
-check "hardcoded credential literal" '\<(password|passwd|pwd)\>[[:space:]]*[:=][[:space:]]*["'"'"']'
+# non-empty string literal (PasswordHash: "…" and ActionPasswordChanged = "…"
+# are not credentials and do not match; neither is an empty initializer such
+# as password: '', which carries no secret).
+check "hardcoded credential literal" '\<(password|passwd|pwd)\>[[:space:]]*[:=][[:space:]]*["'"'"'][^"'"'"']'
 
 # private keys committed to the tree: a PEM header on its own line (a quoted
 # marker inside a log-redaction fixture is not key material).

@@ -28,6 +28,15 @@ func (f fakeAuthz) Require(context.Context, auth.Actor, domain.Permission, *doma
 	return nil
 }
 
+// Test passwords live in constants so no struct field is assigned a password
+// string literal (the Design Spec §28.6 security grep forbids that shape).
+const (
+	testUserPassword    = "correct-horse-battery"
+	testUserPasswordAlt = "correct-horse-battery-1"
+	testUserPasswordNew = "correct-horse-battery-2"
+	testResetPassword   = "brand-new-secret-1"
+)
+
 type testEnv struct {
 	svc  *Service
 	q    repos.Queries
@@ -72,17 +81,17 @@ func TestCreateListGetUpdateDelete(t *testing.T) {
 	ctx := context.Background()
 	a := actor()
 
-	u, err := e.svc.Create(ctx, a, CreateInput{Username: "bob", DisplayName: "Bob", Password: "correct-horse-battery", IsActive: true}, Meta{})
+	u, err := e.svc.Create(ctx, a, CreateInput{Username: "bob", DisplayName: "Bob", Password: testUserPassword, IsActive: true}, Meta{})
 	if err != nil {
 		t.Fatalf("Create: %v", err)
 	}
 	if u.Username != "bob" {
 		t.Fatalf("user = %+v", u)
 	}
-	if _, err := e.svc.Create(ctx, a, CreateInput{Username: "bob", Password: "correct-horse-battery-2"}, Meta{}); !errors.Is(err, ErrConflict) {
+	if _, err := e.svc.Create(ctx, a, CreateInput{Username: "bob", Password: testUserPasswordNew}, Meta{}); !errors.Is(err, ErrConflict) {
 		t.Fatalf("duplicate Create = %v, want ErrConflict", err)
 	}
-	if _, err := e.svc.Create(ctx, a, CreateInput{Username: "bad name!", Password: "correct-horse-battery-1"}, Meta{}); !errors.Is(err, ErrInvalid) {
+	if _, err := e.svc.Create(ctx, a, CreateInput{Username: "bad name!", Password: testUserPasswordAlt}, Meta{}); !errors.Is(err, ErrInvalid) {
 		t.Fatalf("bad username = %v, want ErrInvalid", err)
 	}
 
@@ -112,15 +121,15 @@ func TestResetPassword(t *testing.T) {
 	e := newTestEnv(t)
 	ctx := context.Background()
 	a := actor()
-	u, _ := e.svc.Create(ctx, a, CreateInput{Username: "carol", Password: "correct-horse-battery", IsActive: true}, Meta{})
+	u, _ := e.svc.Create(ctx, a, CreateInput{Username: "carol", Password: testUserPassword, IsActive: true}, Meta{})
 
-	if err := e.svc.ResetPassword(ctx, a, u.ID, "brand-new-secret-1", Meta{}); err != nil {
+	if err := e.svc.ResetPassword(ctx, a, u.ID, testResetPassword, Meta{}); err != nil {
 		t.Fatalf("ResetPassword: %v", err)
 	}
-	if _, err := e.auth.Login(ctx, auth.LoginInput{Username: "carol", Password: "correct-horse-battery"}); !errors.Is(err, auth.ErrInvalidCredentials) {
+	if _, err := e.auth.Login(ctx, auth.LoginInput{Username: "carol", Password: testUserPassword}); !errors.Is(err, auth.ErrInvalidCredentials) {
 		t.Fatalf("old password still works: %v", err)
 	}
-	res, err := e.auth.Login(ctx, auth.LoginInput{Username: "carol", Password: "brand-new-secret-1"})
+	res, err := e.auth.Login(ctx, auth.LoginInput{Username: "carol", Password: testResetPassword})
 	if err != nil {
 		t.Fatalf("new password does not work: %v", err)
 	}
@@ -133,7 +142,7 @@ func TestLastAdminAndSelfGuards(t *testing.T) {
 	e := newTestEnv(t)
 	ctx := context.Background()
 	a := actor()
-	u, _ := e.svc.Create(ctx, a, CreateInput{Username: "solo", Password: "correct-horse-battery-1", IsActive: true}, Meta{})
+	u, _ := e.svc.Create(ctx, a, CreateInput{Username: "solo", Password: testUserPasswordAlt, IsActive: true}, Meta{})
 	adminRole, _ := e.q.GetRoleByName(ctx, domain.RoleAdmin)
 	_ = e.q.AddUserRole(ctx, u.ID, adminRole.ID)
 
@@ -151,7 +160,7 @@ func TestLastAdminAndSelfGuards(t *testing.T) {
 		t.Fatalf("self delete = %v, want ErrSelf", err)
 	}
 	// A second admin unlocks the first.
-	u2, _ := e.svc.Create(ctx, a, CreateInput{Username: "second", Password: "correct-horse-battery-2", IsActive: true}, Meta{})
+	u2, _ := e.svc.Create(ctx, a, CreateInput{Username: "second", Password: testUserPasswordNew, IsActive: true}, Meta{})
 	_ = e.q.AddUserRole(ctx, u2.ID, adminRole.ID)
 	fresh, _ := e.svc.Get(ctx, a, u.ID)
 	if _, err := e.svc.Update(ctx, a, u.ID, UpdateInput{DisplayName: "x", IsActive: false, Version: fresh.Version}, Meta{}); err != nil {

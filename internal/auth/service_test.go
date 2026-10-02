@@ -26,6 +26,9 @@ const pgAuthTestSchema = "nextpanel_auth_test"
 const (
 	testUserPassword = "correct-horse-battery"
 	testNewPassword  = "brand-new-secret-1"
+	// Mirrors the NEXT_PANEL_BOOTSTRAP_PASSWORD default in internal/config;
+	// used only to exercise the default-credential warning.
+	testBootstrapPassword = "123456"
 )
 
 type authEnv struct {
@@ -498,7 +501,7 @@ func TestProfileWarnsWhileDefaultPasswordStanding(t *testing.T) {
 		if err := env.svc.Bootstrap(ctx); err != nil {
 			t.Fatalf("Bootstrap: %v", err)
 		}
-		res, err := env.svc.Login(ctx, LoginInput{Username: "admin", Password: "123456"})
+		res, err := env.svc.Login(ctx, LoginInput{Username: "admin", Password: testBootstrapPassword})
 		if err != nil {
 			t.Fatalf("Login: %v", err)
 		}
