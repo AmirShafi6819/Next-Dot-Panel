@@ -1,0 +1,11 @@
+# Caddy reverse-proxy example for Next.Panel. Caddy handles TLS automatically
+# and proxies WebSockets without extra configuration.
+
+panel.example.com {
+  # Large file uploads.
+  request_body {
+    max_size 512MB
+  }
+
+  reverse_proxy 127.0.0.1:8080
+}

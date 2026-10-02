@@ -1,0 +1,37 @@
+# Nginx reverse-proxy example for Next.Panel. TLS terminates here; the panel
+# itself listens on 127.0.0.1:8080. WebSocket upgrades, large uploads and
+# idle terminal connections need the timeouts and sizes below.
+
+upstream nextpanel {
+  server 127.0.0.1:8080;
+  keepalive 32;
+}
+
+server {
+  listen 443 ssl http2;
+  server_name panel.example.com;
+
+  ssl_certificate     /etc/ssl/panel.example.com/fullchain.pem;
+  ssl_certificate_key /etc/ssl/panel.example.com/privkey.pem;
+
+  # File uploads and archive downloads.
+  client_max_body_size 512M;
+
+  location / {
+    proxy_pass http://nextpanel;
+    proxy_http_version 1.1;
+
+    # WebSocket support (terminal, future live streams).
+    proxy_set_header Upgrade $http_upgrade;
+    proxy_set_header Connection "upgrade";
+
+    proxy_set_header Host $host;
+    proxy_set_header X-Real-IP $remote_addr;
+    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+    proxy_set_header X-Forwarded-Proto $scheme;
+
+    # Terminal sessions idle longer than the default 60s proxy timeout.
+    proxy_read_timeout 1h;
+    proxy_send_timeout 1h;
+  }
+}

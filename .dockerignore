@@ -1,0 +1,13 @@
+# Docker build context exclusions. web/dist is intentionally excluded here: the
+# Dockerfile builds the frontend in its own stage and copies the result in.
+.git/
+.github/
+.env
+.env.*
+web/node_modules/
+web/dist/
+data/
+*.db
+*.db-shm
+*.db-wal
+*.exe

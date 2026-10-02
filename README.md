@@ -8,54 +8,75 @@ small process that runs on a server or a dedicated host and manages other
 machines over SSH — servers, commands, terminals, files, metrics, services,
 containers, jobs and audit history — behind one authenticated web UI.
 
-> **Status: in development.** This repository currently ships the foundation
-> (configuration, logging, migrations, the dual-dialect store layer, and a
-> runnable process with health endpoints). Authentication, RBAC, SSH, the web
-> UI and everything else below is on the roadmap, not yet available. The
-> roadmap table is the source of truth for what exists today.
+> **Status: 0.1.0.** Next.Panel is a working panel: sign in, add Linux servers
+> over SSH with verified host keys, open terminals, manage files, watch
+> metrics and processes, administer users and roles, and review the audit
+> trail — from the embedded web UI or the API. See [Features](#features) for
+> exactly what is implemented, and [docs/limitations.md](docs/limitations.md)
+> for what is not.
 
 ## Features
 
-### Implemented
+Implemented in 0.1.0 (only these are listed — see
+[ROADMAP.md](ROADMAP.md) for what is planned):
 
-- **Runnable server process** — `nextpanel` starts, refuses to start on
-  invalid configuration, and shuts down gracefully on `SIGINT`/`SIGTERM`.
-- **Operational endpoints** — `GET /health`, `GET /ready` (probes the
-  database and pending migrations), `GET /version`, with request IDs and
-  structured access logs.
-- **Configuration** — typed, validated, environment-only secrets; errors are
-  aggregated and secret-free. See [`.env.example`](.env.example).
-- **Store layer** — PostgreSQL and SQLite behind one repository API, versioned
-  migrations (`goose`), generated query code (`sqlc`), integration tests that
-  run against **both** dialects.
-- **Encryption primitive** — AES-256-GCM credential encryption with key
-  identifiers, ready for stored SSH credentials (`internal/crypto`).
-
-### Planned
-
-Authentication (Argon2id, sessions, bootstrap admin), RBAC with per-server
-scoping, server inventory and connection tests, SSH with strict host-key
-verification, command execution, terminal over WebSocket, file manager,
-metrics and charts, process/service/container management, job queue, audit
-log, backups, and the web UI. See [Roadmap](#roadmap).
+- **Authentication** — Argon2id passwords, opaque server-side sessions
+  (absolute + idle expiry, revocation), bootstrap `admin` with a
+  default-credential warning, login rate limiting.
+- **RBAC** — permission catalogue, `admin`/`operator`/`viewer` system roles,
+  custom roles, per-server grants; invisible objects return 404, denials are
+  audited.
+- **Managed servers** — CRUD with optimistic locking, tags/notes/favourites,
+  encrypted credentials, TOFU/STRICT host-key pinning with explicit trust,
+  connection tests with latency and system discovery.
+- **SSH** — fail-closed host keys, modern algorithms, key/password auth,
+  command execution with timeouts and output caps, connection reuse pool.
+- **Terminal** — real PTY over an authenticated WebSocket (xterm.js UI,
+  resize, per-user/server/global limits, idle reaping, audited open/close).
+- **File manager** — browse/upload/download/mkdir/rename/delete over SFTP
+  with streaming, plus secure tar/tar.gz/zip extraction.
+- **Metrics** — `/proc`-based collection, current + historical API, SVG
+  history charts, scheduled collection with retention, SSE live state.
+- **Processes** — remote `ps` list with search, audited SIGTERM/SIGKILL.
+- **Users** — CRUD, disable/delete with last-admin and self guards, password
+  reset, session revocation, per-user login history.
+- **Audit** — append-only trail with filters, plus the login-history record.
+- **Jobs** — persistent DB-backed worker pool with retries and maintenance
+  handlers (retention, session cleanup, terminal sweep).
+- **UI** — embedded React app (login, servers, terminal, files, metrics,
+  processes, users, roles, audit), dark/light aware, responsive.
+- **Operations** — Docker + compose, systemd unit, nginx/Caddy examples,
+  SQLite and PostgreSQL, versioned migrations, `/health` `/ready` `/version`.
 
 ## Architecture
 
 ```
-cmd/nextpanel/          process entrypoint: config → migrate → listen → serve
-internal/config/        typed configuration and validation (env only)
-internal/logging/       structured logger, redaction, request IDs
+cmd/nextpanel/          process entrypoint, CLI, provider/job wiring
+internal/auth/          Argon2id, sessions, login, bootstrap admin
+internal/rbac/          permissions, roles, seeding, authorization
+internal/audit/         audit writer + trail queries
+internal/credentials/   encrypted credential store (sole decrypt boundary)
 internal/crypto/        AES-256-GCM credential encryption, key IDs
 internal/secret/        in-memory secret types that refuse to stringify
+internal/server/        managed servers, connection gateway, host-key trust
+internal/provider/      execution-provider primitives, pool, error taxonomy
+internal/provider/ssh/  SSH provider (fail-closed host keys, exec, SFTP, PTY)
+internal/terminal/      PTY session manager (limits, idle sweep, audit)
+internal/files/         file operations + secure archive extraction
+internal/metrics/       /proc collection, persistence, scheduler
+internal/processes/     remote ps + audited signals
+internal/users/         account administration with safety guards
+internal/jobs/          persistent worker pool + maintenance handlers
 internal/store/         database handles, migrations, dialect adapters
 internal/store/repos/   generated sqlc repositories + hand-written adapters
 internal/httpapi/       chi router, middleware, handlers, error envelopes
 internal/domain/        domain types shared by the layers above
 internal/version/       build version reporting
+web/                    React + TypeScript UI (built to dist/, embedded)
 ```
 
-Design decisions, endpoint contracts, security requirements and the phase
-plan live in
+Design decisions, endpoint contracts and security requirements live in
+[`docs/architecture.md`](docs/architecture.md) and the full specification at
 [`docs/superpowers/specs/2026-09-29-next-panel-design.md`](docs/superpowers/specs/2026-09-29-next-panel-design.md).
 
 ## Requirements
@@ -219,10 +240,10 @@ CHANGELOG entry and a commit.
 | 4 | RBAC: permissions, roles, object-level authorisation | ✅ |
 | 5 | Servers: CRUD, tags, status, connection test | ✅ |
 | 6 | SSH provider: connection, host-key policy, pooling | ✅ |
-| 7–13 | Exec, dashboard, terminal, files, transfer, archive, metrics | ⏳ |
-| 14–21 | Historical metrics, processes, systemd, containers, jobs, audit, tokens, backups | ⏳ |
-| 22–25 | Security hardening, UI, embedded frontend build, Docker/systemd | ⏳ |
-| 26–29 | Full documentation, complete CI, security review, release prep | ⏳ |
+| 7–13 | Exec gateway, terminal, files, metrics, processes, audit, users | ✅ |
+| 14–21 | Jobs, SSE, rate limiting, security headers, UI, Docker/systemd | ✅ |
+| 22–25 | Documentation, CI (Go + web), security review, 0.1.0 release | ✅ |
+| 26–29 | 2FA, containers/systemd control, notifications, agent, plugins (future) | ⏳ |
 
 ## Screenshots
 

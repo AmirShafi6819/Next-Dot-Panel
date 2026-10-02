@@ -1,0 +1,33 @@
+[Unit]
+Description=Next.Panel — self-hosted server control panel
+Documentation=https://github.com/AmirShafi6819/Next-Dot-Panel
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=nextpanel
+Group=nextpanel
+# The binary embeds the UI; only the data directory and environment are external.
+WorkingDirectory=/var/lib/nextpanel
+ExecStart=/usr/local/bin/nextpanel
+EnvironmentFile=/etc/nextpanel/nextpanel.env
+Restart=on-failure
+RestartSec=5s
+
+# Hardening (adjust if the panel needs more; it manages remote hosts over SSH,
+# so outbound TCP must stay open).
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+RestrictSUIDSGID=true
+LockPersonality=true
+MemoryDenyWriteExecute=true
+ReadWritePaths=/var/lib/nextpanel
+
+[Install]
+WantedBy=multi-user.target

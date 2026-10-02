@@ -5,7 +5,7 @@ import "runtime"
 
 // These are overridden at build time via -ldflags.
 var (
-	Version   = "0.1.0-dev"
+	Version   = "0.1.0"
 	Commit    = "unknown"
 	BuildDate = "unknown"
 )

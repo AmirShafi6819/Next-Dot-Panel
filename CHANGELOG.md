@@ -10,6 +10,11 @@ entries are invented.
 
 ## [Unreleased]
 
+## [0.1.0] — 2026-10-02
+
+First functional release. Everything below is implemented, integrated, tested
+on SQLite and PostgreSQL, and served by the binary with the embedded UI.
+
 ### Added
 
 - **Phase 0 — bootstrap.** Module and tooling configuration (`go.mod`,

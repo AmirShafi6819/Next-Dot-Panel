@@ -1,10 +1,9 @@
 # Continuous integration.
 #
-# Gates present from Phase 0 (Design Spec §38): format check, `go vet`,
-# golangci-lint, unit tests, PostgreSQL integration tests, sqlc drift check
-# and the §28.6 security greps. Later phases add frontend lint/typecheck/build,
-# Playwright E2E, the vulnerability scan, Docker build and smoke test
-# (§30.8 gates that need artefacts that do not exist yet).
+# Gates: format check, `go vet`, golangci-lint, unit tests, PostgreSQL
+# integration tests, sqlc drift check, the §28.6 security greps, and the
+# frontend typecheck/production build. Playwright E2E, the vulnerability
+# scan and the Docker smoke test remain future work (§30.8).
 
 name: CI
 
@@ -119,3 +118,22 @@ jobs:
         run: |
           sqlc generate
           git diff --exit-code
+
+  web:
+    name: Frontend typecheck and build
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: web
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+      - name: Install
+        run: npm ci --no-audit --no-fund
+      - name: Typecheck and production build
+        run: npm run build

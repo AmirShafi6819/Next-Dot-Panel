@@ -1,0 +1,42 @@
+# Next.Panel compose file. SQLite is the default database (a single volume);
+# uncomment the postgres service and set NEXT_PANEL_DB_DRIVER=postgres plus
+# NEXT_PANEL_DB_DSN for a production PostgreSQL backend.
+
+services:
+  nextpanel:
+    build:
+      context: ../..
+      dockerfile: deploy/docker/Dockerfile
+    image: next-panel:latest
+    ports:
+      - "127.0.0.1:8080:8080"
+    environment:
+      NEXT_PANEL_ENV: production
+      NEXT_PANEL_EXTERNAL_SCHEME: http
+      NEXT_PANEL_LISTEN: :8080
+      NEXT_PANEL_DATA_DIR: /data
+      NEXT_PANEL_ENCRYPTION_KEY: ${NEXT_PANEL_ENCRYPTION_KEY:?set NEXT_PANEL_ENCRYPTION_KEY (generate with `nextpanel crypto generate-key`)}
+      NEXT_PANEL_BOOTSTRAP_ADMIN: "true"
+    volumes:
+      - panel-data:/data
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:8080/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+
+  # postgres:
+  #   image: postgres:16
+  #   environment:
+  #     POSTGRES_USER: nextpanel
+  #     POSTGRES_PASSWORD: ${NEXT_PANEL_DB_PASSWORD:?set for postgres}
+  #     POSTGRES_DB: nextpanel
+  #   volumes:
+  #     - pg-data:/var/lib/postgresql/data
+  #   restart: unless-stopped
+
+volumes:
+  panel-data:
+  # pg-data:
