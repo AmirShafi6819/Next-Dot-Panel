@@ -80,6 +80,15 @@ entries are invented.
   are sent with POSIX single-quote escaping, never interpolated raw. The
   provider is registered with the execution registry at startup, and connection
   testing now connects over SSH for real.
+- **Files and terminal.** The provider interface grew the real primitives
+  (list/stat/read/write/remove/rename/mkdir, interactive PTY); the SSH provider
+  implements files over SFTP and terminals over a PTY shell. `internal/files`
+  streams uploads/downloads, validates every browser-supplied path, and
+  extracts tar/tar.gz/zip archives entry by entry with traversal, symlink,
+  entry-count and size guards. `internal/terminal` manages PTY sessions with
+  per-user/per-server/global limits, idle reaping and audited open/close.
+  HTTP under `/api/v1/servers/{id}/files…` and a WebSocket at
+  `/api/v1/servers/{id}/terminal` with a documented message protocol.
 
 ### Security
 

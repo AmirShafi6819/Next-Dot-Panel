@@ -24,6 +24,7 @@ import (
 	"github.com/ashaibery/Next-Dot-Panel/internal/config"
 	"github.com/ashaibery/Next-Dot-Panel/internal/credentials"
 	"github.com/ashaibery/Next-Dot-Panel/internal/crypto"
+	"github.com/ashaibery/Next-Dot-Panel/internal/files"
 	"github.com/ashaibery/Next-Dot-Panel/internal/httpapi"
 	"github.com/ashaibery/Next-Dot-Panel/internal/logging"
 	"github.com/ashaibery/Next-Dot-Panel/internal/provider"
@@ -31,6 +32,7 @@ import (
 	"github.com/ashaibery/Next-Dot-Panel/internal/server"
 	"github.com/ashaibery/Next-Dot-Panel/internal/store"
 	"github.com/ashaibery/Next-Dot-Panel/internal/store/repos"
+	"github.com/ashaibery/Next-Dot-Panel/internal/terminal"
 	"github.com/ashaibery/Next-Dot-Panel/internal/version"
 )
 
@@ -138,6 +140,22 @@ func serve(ctx context.Context, stdout, stderr io.Writer) int {
 		MaxCommandOutputBytes: cfg.Limits.MaxCommandOutputBytes,
 	})
 
+	terminalSvc := terminal.New(serverSvc, auditWriter, log, terminal.Limits{
+		PerUser:     cfg.Limits.MaxTerminalsPerUser,
+		PerServer:   cfg.Limits.MaxTerminalsPerServer,
+		Global:      cfg.Limits.MaxTerminalsGlobal,
+		IdleTimeout: cfg.Timeouts.TerminalIdle,
+	})
+	defer terminalSvc.CloseAll("shutdown")
+	go sweepTerminals(ctx, terminalSvc)
+
+	fileSvc := files.New(serverSvc, auditWriter, log, files.Limits{
+		MaxEntries:    cfg.Limits.MaxArchiveEntries,
+		MaxTotalBytes: cfg.Limits.MaxArchiveTotalBytes,
+		MaxFileBytes:  cfg.Limits.MaxArchiveFileBytes,
+		MaxRatio:      cfg.Limits.MaxArchiveRatio,
+	})
+
 	// Binding before serving makes an occupied port a startup failure with a
 	// clear message instead of a crash loop.
 	ln, err := net.Listen("tcp", cfg.App.ListenAddr)
@@ -146,7 +164,7 @@ func serve(ctx context.Context, stdout, stderr io.Writer) int {
 		return 1
 	}
 
-	handler := httpapi.New(httpapi.Deps{Config: cfg, DB: db, Log: log, Auth: authSvc, RBAC: rbacSvc, Servers: serverSvc})
+	handler := httpapi.New(httpapi.Deps{Config: cfg, DB: db, Log: log, Auth: authSvc, RBAC: rbacSvc, Servers: serverSvc, Terminal: terminalSvc, Files: fileSvc})
 	srv := &http.Server{
 		Handler:           handler,
 		ReadHeaderTimeout: 10 * time.Second,

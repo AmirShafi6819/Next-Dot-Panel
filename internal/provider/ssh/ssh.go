@@ -16,6 +16,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/pkg/sftp"
 	xssh "golang.org/x/crypto/ssh"
 
 	"github.com/ashaibery/Next-Dot-Panel/internal/domain"
@@ -74,6 +75,7 @@ type Provider struct {
 
 	mu     sync.Mutex
 	client *xssh.Client
+	sftp   *sftp.Client
 	status provider.ConnectionStatus
 }
 
@@ -145,9 +147,14 @@ func (p *Provider) Connect(ctx context.Context, t domain.Target, creds provider.
 func (p *Provider) Disconnect(context.Context) error {
 	p.mu.Lock()
 	client := p.client
+	sc := p.sftp
 	p.client = nil
+	p.sftp = nil
 	p.status = provider.StatusDisconnected
 	p.mu.Unlock()
+	if sc != nil {
+		_ = sc.Close()
+	}
 	if client != nil {
 		return client.Close()
 	}

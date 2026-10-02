@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"io"
+	"os"
 	"path/filepath"
 	"strings"
 	"sync"
@@ -72,6 +73,31 @@ func (f *fakeProvider) Exec(context.Context, provider.Command) (*provider.ExecRe
 
 func (f *fakeProvider) ExecStream(context.Context, provider.Command) (io.ReadCloser, error) {
 	return io.NopCloser(strings.NewReader("")), nil
+}
+
+func (f *fakeProvider) OpenPTY(context.Context, provider.PTYOptions) (provider.PTY, error) {
+	return nil, provider.NewError(provider.CodeUnsupported, "pty", nil)
+}
+func (f *fakeProvider) Stat(context.Context, string) (*domain.FileInfo, error) {
+	return nil, provider.NewError(provider.CodeUnsupported, "stat", nil)
+}
+func (f *fakeProvider) ListDir(context.Context, string) ([]domain.FileInfo, error) {
+	return nil, provider.NewError(provider.CodeUnsupported, "list", nil)
+}
+func (f *fakeProvider) OpenRead(context.Context, string, int64) (io.ReadCloser, error) {
+	return nil, provider.NewError(provider.CodeUnsupported, "read", nil)
+}
+func (f *fakeProvider) OpenWrite(context.Context, string, os.FileMode, int64) (io.WriteCloser, error) {
+	return nil, provider.NewError(provider.CodeUnsupported, "write", nil)
+}
+func (f *fakeProvider) Remove(context.Context, []string, bool) error {
+	return provider.NewError(provider.CodeUnsupported, "remove", nil)
+}
+func (f *fakeProvider) Rename(context.Context, string, string) error {
+	return provider.NewError(provider.CodeUnsupported, "rename", nil)
+}
+func (f *fakeProvider) Mkdir(context.Context, string, os.FileMode) error {
+	return provider.NewError(provider.CodeUnsupported, "mkdir", nil)
 }
 
 type testEnv struct {

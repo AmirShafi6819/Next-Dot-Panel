@@ -14,6 +14,67 @@ import (
 	"github.com/ashaibery/Next-Dot-Panel/internal/store/repos"
 )
 
+// Connect authorizes the actor for perm on the server and returns a connected
+// provider plus the credential source. The caller must Close the credential
+// source. The provider stays pooled for reuse; callers do not disconnect it.
+//
+// This is the single gateway every feature (exec, files, terminal, metrics,
+// processes) uses, so the authorization and credential-unwrapping logic exists
+// once.
+func (s *Service) Connect(ctx context.Context, actor auth.Actor, id domain.ServerID, perm domain.Permission) (provider.ServerExecutionProvider, provider.CredentialSource, error) {
+	srv, err := s.loadVisible(ctx, actor, id)
+	if err != nil {
+		return nil, nil, err
+	}
+	if err := s.authz.Require(ctx, actor, perm, &id); err != nil {
+		return nil, nil, ErrNotFound
+	}
+
+	var src provider.CredentialSource
+	if srv.Target.Type == domain.TargetSSH && (srv.Target.AuthMethod == domain.AuthKey || srv.Target.AuthMethod == domain.AuthPassword) {
+		unwrapped, uerr := s.creds.Unwrap(ctx, id)
+		if uerr != nil {
+			return nil, nil, fmt.Errorf("%w: %v", ErrInvalid, uerr)
+		}
+		src = unwrapped
+	}
+
+	p, err := s.reg.For(ctx, srv.Target)
+	if err != nil {
+		if src != nil {
+			src.Close()
+		}
+		return nil, nil, err
+	}
+	if err := p.Connect(ctx, srv.Target, src); err != nil {
+		if src != nil {
+			src.Close()
+		}
+		return nil, nil, err
+	}
+	return p, src, nil
+}
+
+// Exec runs a command on a server. Requires servers.connect. The exit code is
+// a result, not an error; transport failures are returned as errors.
+func (s *Service) Exec(ctx context.Context, actor auth.Actor, id domain.ServerID, cmd provider.Command, meta Meta) (*provider.ExecResult, error) {
+	p, src, err := s.Connect(ctx, actor, id, domain.PermServersConnect)
+	if err != nil {
+		return nil, err
+	}
+	if src != nil {
+		defer src.Close()
+	}
+	if cmd.MaxOutputBytes == 0 {
+		cmd.MaxOutputBytes = s.opts.MaxCommandOutputBytes
+	}
+	res, err := p.Exec(ctx, cmd)
+	if err != nil {
+		return nil, err
+	}
+	return res, nil
+}
+
 // HostKeyPrompt is presented when a connection is refused because the host key
 // is unknown. The operator must explicitly trust it before the connection is
 // retried (Design Spec §9.1).

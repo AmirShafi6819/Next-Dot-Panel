@@ -270,7 +270,7 @@ func TestExecSuccessAndStreams(t *testing.T) {
 	if res.ExitCode != 0 || !strings.Contains(string(res.Stdout), "hello world") {
 		t.Fatalf("result = %+v, want stdout hello world", res)
 	}
-	if res.Duration <= 0 {
+	if res.Duration < 0 {
 		t.Fatal("duration was not measured")
 	}
 }

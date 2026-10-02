@@ -10,6 +10,7 @@ package provider
 import (
 	"context"
 	"io"
+	"os"
 	"time"
 
 	"github.com/ashaibery/Next-Dot-Panel/internal/domain"
@@ -85,10 +86,27 @@ type CredentialSource interface {
 	Close()
 }
 
+// PTYOptions configures an interactive terminal.
+type PTYOptions struct {
+	Term string
+	Cols uint16
+	Rows uint16
+	Env  []string
+}
+
+// PTY is an interactive pseudo-terminal. Read receives the remote output
+// (including ANSI sequences); Write sends keystrokes.
+type PTY interface {
+	Read(p []byte) (int, error)
+	Write(p []byte) (int, error)
+	Resize(ctx context.Context, cols, rows uint16) error
+	Wait() (exitCode int, err error)
+	Close() error
+}
+
 // ServerExecutionProvider is the primitive surface every backend implements.
-//
-// File and PTY primitives are added as their phases land; this interface grows
-// with the features that need it rather than shipping stubs.
+// Policy (upload, extract, metrics, service management) is composed above it
+// so it exists once and is authorized once (Design Spec §8.2).
 type ServerExecutionProvider interface {
 	// ID identifies the provider implementation ("ssh", "local").
 	ID() string
@@ -112,4 +130,28 @@ type ServerExecutionProvider interface {
 
 	// ExecStream runs a command and returns its combined output as a stream.
 	ExecStream(ctx context.Context, cmd Command) (io.ReadCloser, error)
+
+	// OpenPTY opens an interactive terminal session.
+	OpenPTY(ctx context.Context, o PTYOptions) (PTY, error)
+
+	// Stat returns metadata for one path.
+	Stat(ctx context.Context, path string) (*domain.FileInfo, error)
+
+	// ListDir lists one directory.
+	ListDir(ctx context.Context, path string) ([]domain.FileInfo, error)
+
+	// OpenRead opens a file for reading starting at offset.
+	OpenRead(ctx context.Context, path string, offset int64) (io.ReadCloser, error)
+
+	// OpenWrite opens a file for writing, truncating it. size is a hint.
+	OpenWrite(ctx context.Context, path string, mode os.FileMode, size int64) (io.WriteCloser, error)
+
+	// Remove deletes files, or directories when recursive is set.
+	Remove(ctx context.Context, paths []string, recursive bool) error
+
+	// Rename moves a file or directory.
+	Rename(ctx context.Context, from, to string) error
+
+	// Mkdir creates a directory and any missing parents.
+	Mkdir(ctx context.Context, path string, mode os.FileMode) error
 }

@@ -4,12 +4,14 @@ import (
 	"context"
 	"database/sql"
 	"errors"
+	"time"
 
 	"github.com/ashaibery/Next-Dot-Panel/internal/config"
 	"github.com/ashaibery/Next-Dot-Panel/internal/domain"
 	"github.com/ashaibery/Next-Dot-Panel/internal/provider"
 	sshprovider "github.com/ashaibery/Next-Dot-Panel/internal/provider/ssh"
 	"github.com/ashaibery/Next-Dot-Panel/internal/store/repos"
+	"github.com/ashaibery/Next-Dot-Panel/internal/terminal"
 )
 
 // hostKeyResolver adapts the repository's pinned host key to the SSH
@@ -45,4 +47,18 @@ func registerProviders(reg *provider.Registry, q repos.Queries, cfg *config.Conf
 			MaxOutputBytes: cfg.Limits.MaxCommandOutputBytes,
 		},
 	))
+}
+
+// sweepTerminals closes idle terminal sessions on a fixed cadence.
+func sweepTerminals(ctx context.Context, m *terminal.Manager) {
+	ticker := time.NewTicker(time.Minute)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case now := <-ticker.C:
+			m.Sweep(now)
+		}
+	}
 }

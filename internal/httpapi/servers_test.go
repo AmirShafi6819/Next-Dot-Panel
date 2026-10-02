@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"net/http/cookiejar"
 	"net/http/httptest"
+	"os"
 	"path/filepath"
 	"strconv"
 	"testing"
@@ -45,6 +46,31 @@ func (httpFakeProvider) Exec(context.Context, provider.Command) (*provider.ExecR
 }
 func (httpFakeProvider) ExecStream(context.Context, provider.Command) (io.ReadCloser, error) {
 	return io.NopCloser(nil), nil
+}
+
+func (httpFakeProvider) OpenPTY(context.Context, provider.PTYOptions) (provider.PTY, error) {
+	return nil, provider.NewError(provider.CodeUnsupported, "pty", nil)
+}
+func (httpFakeProvider) Stat(context.Context, string) (*domain.FileInfo, error) {
+	return nil, provider.NewError(provider.CodeUnsupported, "stat", nil)
+}
+func (httpFakeProvider) ListDir(context.Context, string) ([]domain.FileInfo, error) {
+	return nil, provider.NewError(provider.CodeUnsupported, "list", nil)
+}
+func (httpFakeProvider) OpenRead(context.Context, string, int64) (io.ReadCloser, error) {
+	return nil, provider.NewError(provider.CodeUnsupported, "read", nil)
+}
+func (httpFakeProvider) OpenWrite(context.Context, string, os.FileMode, int64) (io.WriteCloser, error) {
+	return nil, provider.NewError(provider.CodeUnsupported, "write", nil)
+}
+func (httpFakeProvider) Remove(context.Context, []string, bool) error {
+	return provider.NewError(provider.CodeUnsupported, "remove", nil)
+}
+func (httpFakeProvider) Rename(context.Context, string, string) error {
+	return provider.NewError(provider.CodeUnsupported, "rename", nil)
+}
+func (httpFakeProvider) Mkdir(context.Context, string, os.FileMode) error {
+	return provider.NewError(provider.CodeUnsupported, "mkdir", nil)
 }
 
 func newServerEnv(t *testing.T) (*httptest.Server, *http.Client, repos.Queries) {

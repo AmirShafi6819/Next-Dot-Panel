@@ -3,6 +3,7 @@ package provider
 import (
 	"context"
 	"io"
+	"os"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -32,6 +33,31 @@ func (s *stubProvider) Exec(context.Context, Command) (*ExecResult, error) {
 }
 func (s *stubProvider) ExecStream(context.Context, Command) (io.ReadCloser, error) {
 	return io.NopCloser(nil), nil
+}
+
+func (s *stubProvider) OpenPTY(context.Context, PTYOptions) (PTY, error) {
+	return nil, NewError(CodeUnsupported, "pty", nil)
+}
+func (s *stubProvider) Stat(context.Context, string) (*domain.FileInfo, error) {
+	return nil, NewError(CodeUnsupported, "stat", nil)
+}
+func (s *stubProvider) ListDir(context.Context, string) ([]domain.FileInfo, error) {
+	return nil, NewError(CodeUnsupported, "list", nil)
+}
+func (s *stubProvider) OpenRead(context.Context, string, int64) (io.ReadCloser, error) {
+	return nil, NewError(CodeUnsupported, "read", nil)
+}
+func (s *stubProvider) OpenWrite(context.Context, string, os.FileMode, int64) (io.WriteCloser, error) {
+	return nil, NewError(CodeUnsupported, "write", nil)
+}
+func (s *stubProvider) Remove(context.Context, []string, bool) error {
+	return NewError(CodeUnsupported, "remove", nil)
+}
+func (s *stubProvider) Rename(context.Context, string, string) error {
+	return NewError(CodeUnsupported, "rename", nil)
+}
+func (s *stubProvider) Mkdir(context.Context, string, os.FileMode) error {
+	return NewError(CodeUnsupported, "mkdir", nil)
 }
 
 func TestRegistryReusesPerServer(t *testing.T) {
