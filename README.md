@@ -96,8 +96,10 @@ video walkthrough will be linked from this section when one exists.
 
 ## Features
 
-Everything below is implemented and covered by automated tests on SQLite and
-PostgreSQL. Planned but unimplemented work is listed separately in
+Everything below is implemented. Backend behavior is covered by automated
+unit and integration tests on SQLite and PostgreSQL; the frontend is
+verified by TypeScript typecheck and production build (no browser E2E
+suite yet). Planned but unimplemented work is listed separately in
 [ROADMAP.md](ROADMAP.md), never here.
 
 ### Server management
@@ -355,12 +357,19 @@ Docker support exists as buildable assets; no image is published.
 
 ```sh
 docker build -f deploy/docker/Dockerfile -t nextpanel:beta .
+docker run --rm nextpanel:beta crypto generate-key   # fresh encryption key
+export NEXT_PANEL_ENCRYPTION_KEY='<paste the key>'
 docker compose -f deploy/docker/compose.yaml up -d
 ```
 
-`compose.yaml` wires the app to PostgreSQL with a persistent volume. Set the
-encryption key and bootstrap credentials in the environment before first
-start — see [`docs/deployment.md`](docs/deployment.md).
+`compose.yaml` runs the app with a persistent SQLite volume by default; a
+commented-out PostgreSQL service is included for production use (uncomment
+it and set `NEXT_PANEL_DB_DRIVER=postgres` plus `NEXT_PANEL_DB_DSN`). The
+compose file requires `NEXT_PANEL_ENCRYPTION_KEY` in the environment before
+first start and seeds the default bootstrap admin (`admin` / `123456`,
+flagged until changed) unless you add `NEXT_PANEL_BOOTSTRAP_USERNAME` /
+`NEXT_PANEL_BOOTSTRAP_PASSWORD` overrides — see
+[`docs/deployment.md`](docs/deployment.md).
 
 ## Development
 

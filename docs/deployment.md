@@ -3,9 +3,9 @@
 ## Docker (recommended)
 
 ```sh
-cp .env.example .env   # not needed; compose reads NEXT_PANEL_ENCRYPTION_KEY from the environment
-export NEXT_PANEL_ENCRYPTION_KEY="$(docker run --rm next-panel nextpanel crypto generate-key)"
-docker compose -f deploy/docker/compose.yaml up -d --build
+docker build -f deploy/docker/Dockerfile -t next-panel .
+export NEXT_PANEL_ENCRYPTION_KEY="$(docker run --rm next-panel crypto generate-key)"
+docker compose -f deploy/docker/compose.yaml up -d
 ```
 
 The image builds the React UI and embeds it, runs migrations on start, and

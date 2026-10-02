@@ -16,13 +16,17 @@ on:
       - "v*.*.*"
 
 permissions:
-  contents: write
+  contents: read
 
 jobs:
   build:
     name: Build ${{ matrix.goos }}/${{ matrix.goarch }}
     runs-on: ubuntu-latest
     timeout-minutes: 20
+    # Least privilege: builds only read the repo. Publishing is confined to
+    # the publish job below.
+    permissions:
+      contents: read
     strategy:
       fail-fast: false
       matrix:
@@ -92,6 +96,8 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     needs: build
+    permissions:
+      contents: write
     steps:
       - uses: actions/download-artifact@v4
         with:
