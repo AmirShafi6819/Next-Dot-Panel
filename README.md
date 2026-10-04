@@ -88,19 +88,27 @@ be one.
 
 ### Servers
 
-*Screenshot: server list with connection status — coming soon.*
+<p align="center">
+  <img src="./docs/assets/servers.png" alt="Next.Panel" width="100%">
+</p>
 
 ### Web Terminal
 
-*Screenshot: browser terminal session — coming soon.*
+<p align="center">
+  <img src="./docs/assets/terminal.png" alt="Next.Panel" width="100%">
+</p>
 
 ### File Manager
 
-*Screenshot: remote file browser — coming soon.*
+<p align="center">
+  <img src="./docs/assets/filemanager.png" alt="Next.Panel" width="100%">
+</p>
 
 ### Monitoring
 
-*Screenshot: metrics history charts — coming soon.*
+<p align="center">
+  <img src="./docs/assets/metris.png" alt="Next.Panel" width="100%">
+</p>
 
 ## Demo
 
