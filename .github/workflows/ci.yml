@@ -66,7 +66,7 @@ jobs:
           go-version: ${{ matrix.go-version }}
       # The Go binary embeds web/dist, so the frontend must be built first —
       # otherwise CI would test an API-only binary.
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         with:
           node-version: 20
           cache: npm
@@ -105,7 +105,7 @@ jobs:
         with:
           go-version: stable
       # Same ordering reason as the test job: embed the real UI before building.
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         with:
           node-version: 20
           cache: npm
@@ -147,7 +147,7 @@ jobs:
         working-directory: web
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         with:
           node-version: 20
           cache: npm
